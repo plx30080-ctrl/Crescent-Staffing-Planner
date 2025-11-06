@@ -785,7 +785,7 @@
                             ...line,
                             positions: line.positions.map(pos =>
                                 pos.id === positionId
-                                    ? { ...pos, name: name.trim(), isNew }
+                                    ? { ...pos, name: name, isNew }
                                     : pos
                             )
                         };
@@ -796,7 +796,7 @@
 
             const handleUpdateWaitlistItem = (itemId, name, isNew) => {
                 setWaitlist(prev => prev.map(item =>
-                    item.id === itemId ? { ...item, name: name.trim(), isNew } : item
+                    item.id === itemId ? { ...item, name: name, isNew } : item
                 ));
             };
 
