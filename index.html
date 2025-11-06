@@ -209,11 +209,13 @@
         }
 
         .line-lead {
-            font-size: 12px;
+            font-size: 11px;
             opacity: 0.95;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            line-height: 1.3;
+            max-height: 40px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            word-wrap: break-word;
         }
 
         .line-stats {
@@ -558,9 +560,101 @@
             font-size: 13px;
         }
 
-        .core-associate-notes {
+        .core-associate-flags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .flag-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .flag-sitdown { background: #dbeafe; color: #1e40af; }
+        .flag-sanitation { background: #fef3c7; color: #92400e; }
+        .flag-office { background: #e9d5ff; color: #6b21a8; }
+        .flag-high { background: #d1fae5; color: #065f46; }
+        .flag-low { background: #fee2e2; color: #991b1b; }
+
+        .flag-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .flag-dropdown-content {
+            position: absolute;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 8px;
+            z-index: 1000;
+            min-width: 180px;
+            top: 100%;
+            left: 0;
+            margin-top: 4px;
+        }
+
+        .flag-option {
+            padding: 6px 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .flag-option:hover {
+            background: #f3f4f6;
+        }
+
+        .flag-option input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        .filter-controls {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .line-edit-controls {
+            display: flex;
+            gap: 4px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .line-edit-input {
+            width: 100%;
+            padding: 4px 6px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 3px;
             font-size: 11px;
-            color: #6b7280;
+            margin-top: 4px;
+            background: rgba(255,255,255,0.9);
         }
 
         .firebase-config {
@@ -750,28 +844,39 @@
                 setCurrentDate(shiftData.date);
                 setCurrentShift(shiftData.shift);
 
-                const newLines = shiftData.lines.map(line => ({
-                    id: Date.now() + Math.random(),
-                    letter: line.letter,
-                    lead: line.lead,
-                    needed: parseInt(line.needed),
-                    positions: Array(parseInt(line.needed)).fill(null).map((_, idx) => {
-                        // Pre-fill with core associates
-                        const coreList = coreAssociates[line.lead] || [];
-                        if (idx < coreList.length) {
+                const newLines = shiftData.lines.map(line => {
+                    // Support both old (single lead) and new (multiple leads) format
+                    const leads = line.leads || (line.lead ? [line.lead] : []);
+
+                    // Combine core associates from all leads
+                    const allCoreAssociates = [];
+                    leads.forEach(lead => {
+                        const coreList = coreAssociates[lead] || [];
+                        allCoreAssociates.push(...coreList);
+                    });
+
+                    return {
+                        id: Date.now() + Math.random(),
+                        letter: line.letter,
+                        leads: leads,
+                        needed: parseInt(line.needed),
+                        positions: Array(parseInt(line.needed)).fill(null).map((_, idx) => {
+                            // Pre-fill with core associates from all leads
+                            if (idx < allCoreAssociates.length) {
+                                return {
+                                    id: Date.now() + Math.random() + idx,
+                                    name: allCoreAssociates[idx].name,
+                                    isNew: false
+                                };
+                            }
                             return {
                                 id: Date.now() + Math.random() + idx,
-                                name: coreList[idx].name,
+                                name: '',
                                 isNew: false
                             };
-                        }
-                        return {
-                            id: Date.now() + Math.random() + idx,
-                            name: '',
-                            isNew: false
-                        };
-                    })
-                }));
+                        })
+                    };
+                });
 
                 setLines(newLines);
                 setWaitlist([]);
@@ -812,6 +917,57 @@
                 setWaitlist(prev => prev.filter(item => item.id !== itemId));
             };
 
+            const handleAddLine = () => {
+                const newLine = {
+                    id: Date.now() + Math.random(),
+                    letter: '',
+                    leads: [],
+                    needed: 5,
+                    positions: Array(5).fill(null).map((_, idx) => ({
+                        id: Date.now() + Math.random() + idx,
+                        name: '',
+                        isNew: false
+                    }))
+                };
+                setLines(prev => [...prev, newLine]);
+            };
+
+            const handleRemoveLine = (lineId) => {
+                if (confirm('Remove this line? This cannot be undone.')) {
+                    setLines(prev => prev.filter(line => line.id !== lineId));
+                }
+            };
+
+            const handleUpdateLine = (lineId, updates) => {
+                setLines(prev => prev.map(line => {
+                    if (line.id === lineId) {
+                        const updatedLine = { ...line, ...updates };
+
+                        // If needed count changed, adjust positions array
+                        if (updates.needed !== undefined && updates.needed !== line.positions.length) {
+                            const newNeeded = parseInt(updates.needed) || 0;
+                            if (newNeeded > line.positions.length) {
+                                // Add more positions
+                                const additionalPositions = Array(newNeeded - line.positions.length)
+                                    .fill(null)
+                                    .map((_, idx) => ({
+                                        id: Date.now() + Math.random() + idx,
+                                        name: '',
+                                        isNew: false
+                                    }));
+                                updatedLine.positions = [...line.positions, ...additionalPositions];
+                            } else {
+                                // Remove excess positions
+                                updatedLine.positions = line.positions.slice(0, newNeeded);
+                            }
+                        }
+
+                        return updatedLine;
+                    }
+                    return line;
+                }));
+            };
+
             const handleAddCoreAssociate = (lead, associate) => {
                 setCoreAssociates(prev => ({
                     ...prev,
@@ -823,6 +979,13 @@
                 setCoreAssociates(prev => ({
                     ...prev,
                     [lead]: prev[lead].filter((_, i) => i !== index)
+                }));
+            };
+
+            const handleUpdateCoreAssociate = (lead, index, updates) => {
+                setCoreAssociates(prev => ({
+                    ...prev,
+                    [lead]: prev[lead].map((assoc, i) => i === index ? { ...assoc, ...updates } : assoc)
                 }));
             };
 
@@ -916,6 +1079,9 @@
                                 onUpdateWaitlistItem={handleUpdateWaitlistItem}
                                 onAddWaitlistItem={handleAddWaitlistItem}
                                 onRemoveWaitlistItem={handleRemoveWaitlistItem}
+                                onAddLine={handleAddLine}
+                                onRemoveLine={handleRemoveLine}
+                                onUpdateLine={handleUpdateLine}
                             />
                         )}
 
@@ -935,6 +1101,7 @@
                                 coreAssociates={coreAssociates}
                                 onAddCoreAssociate={handleAddCoreAssociate}
                                 onRemoveCoreAssociate={handleRemoveCoreAssociate}
+                                onUpdateCoreAssociate={handleUpdateCoreAssociate}
                             />
                         )}
                     </div>
@@ -951,7 +1118,10 @@
             onUpdatePosition,
             onUpdateWaitlistItem,
             onAddWaitlistItem,
-            onRemoveWaitlistItem
+            onRemoveWaitlistItem,
+            onAddLine,
+            onRemoveLine,
+            onUpdateLine
         }) {
             if (lines.length === 0) {
                 return (
@@ -1000,8 +1170,16 @@
                                     key={line.id}
                                     line={line}
                                     onUpdatePosition={onUpdatePosition}
+                                    onUpdateLine={onUpdateLine}
+                                    onRemoveLine={onRemoveLine}
                                 />
                             ))}
+                            <div className="line-column" style={{ minWidth: '120px', width: '120px', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', background: '#f9fafb' }} onClick={onAddLine}>
+                                <div style={{ textAlign: 'center', color: '#667eea', fontSize: '14px', fontWeight: '600' }}>
+                                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>+</div>
+                                    <div>Add Line</div>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="waitlist-sidebar">
@@ -1057,15 +1235,103 @@
             );
         }
 
-        function LineColumn({ line, onUpdatePosition }) {
+        function LineColumn({ line, onUpdatePosition, onUpdateLine, onRemoveLine }) {
+            const [isEditing, setIsEditing] = useState(false);
+            const [editLetter, setEditLetter] = useState(line.letter);
+            const [editLeads, setEditLeads] = useState((line.leads || []).join(', '));
+            const [editNeeded, setEditNeeded] = useState(line.needed);
+
             const filledCount = line.positions.filter(p => p.name.trim()).length;
+            const leads = line.leads || (line.lead ? [line.lead] : []);
+
+            const handleSaveEdit = () => {
+                const leadsArray = editLeads.split(',').map(l => l.trim()).filter(l => l);
+                onUpdateLine(line.id, {
+                    letter: editLetter,
+                    leads: leadsArray,
+                    needed: parseInt(editNeeded) || line.needed
+                });
+                setIsEditing(false);
+            };
+
+            const handleCancelEdit = () => {
+                setEditLetter(line.letter);
+                setEditLeads((line.leads || []).join(', '));
+                setEditNeeded(line.needed);
+                setIsEditing(false);
+            };
 
             return (
                 <div className="line-column">
                     <div className="line-header">
-                        <div className="line-letter">Line {line.letter}</div>
-                        <div className="line-lead">{line.lead}</div>
-                        <div className="line-stats">{filledCount} / {line.needed} filled</div>
+                        {!isEditing ? (
+                            <>
+                                <div className="line-letter">Line {line.letter || '?'}</div>
+                                <div className="line-lead">
+                                    {leads.length > 0 ? leads.join(', ') : 'No lead'}
+                                </div>
+                                <div className="line-stats">{filledCount} / {line.needed} filled</div>
+                                <div className="line-edit-controls">
+                                    <button
+                                        className="btn btn-secondary btn-small"
+                                        onClick={() => setIsEditing(true)}
+                                        style={{ fontSize: '10px', padding: '3px 6px' }}
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        className="btn btn-danger btn-small"
+                                        onClick={() => onRemoveLine(line.id)}
+                                        style={{ fontSize: '10px', padding: '3px 6px' }}
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div style={{ fontSize: '10px', marginBottom: '4px', opacity: 0.9 }}>Edit Line</div>
+                                <input
+                                    type="text"
+                                    className="line-edit-input"
+                                    value={editLetter}
+                                    onChange={(e) => setEditLetter(e.target.value.toUpperCase())}
+                                    placeholder="Letter (A, B, C...)"
+                                    maxLength="2"
+                                />
+                                <input
+                                    type="text"
+                                    className="line-edit-input"
+                                    value={editLeads}
+                                    onChange={(e) => setEditLeads(e.target.value)}
+                                    placeholder="Leads (comma-separated)"
+                                />
+                                <input
+                                    type="number"
+                                    className="line-edit-input"
+                                    value={editNeeded}
+                                    onChange={(e) => setEditNeeded(e.target.value)}
+                                    placeholder="Quantity"
+                                    min="1"
+                                />
+                                <div className="line-edit-controls">
+                                    <button
+                                        className="btn btn-success btn-small"
+                                        onClick={handleSaveEdit}
+                                        style={{ fontSize: '10px', padding: '3px 6px' }}
+                                    >
+                                        Save
+                                    </button>
+                                    <button
+                                        className="btn btn-secondary btn-small"
+                                        onClick={handleCancelEdit}
+                                        style={{ fontSize: '10px', padding: '3px 6px' }}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </div>
                     <div className="positions-list">
                         {line.positions.map((position, index) => (
@@ -1116,7 +1382,10 @@
 
             const handleSubmit = (e) => {
                 e.preventDefault();
-                const validLines = lines.filter(l => l.letter && l.lead && l.needed);
+                const validLines = lines.filter(l => l.letter && l.lead && l.needed).map(l => ({
+                    ...l,
+                    leads: l.lead.split(',').map(lead => lead.trim()).filter(lead => lead)
+                }));
                 if (validLines.length > 0) {
                     onSetupShift({ date, shift, lines: validLines });
                 } else {
@@ -1167,13 +1436,13 @@
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label>Line Lead *</label>
+                                    <label>Line Lead(s) * <span style={{ fontSize: '10px', fontWeight: 'normal', opacity: '0.7' }}>(comma-separated for multiple)</span></label>
                                     <input
                                         type="text"
                                         list="leads"
                                         value={line.lead}
                                         onChange={(e) => handleLineChange(index, 'lead', e.target.value)}
-                                        placeholder="Lead name"
+                                        placeholder="John Doe, Jane Smith"
                                         required
                                     />
                                     <datalist id="leads">
@@ -1316,25 +1585,121 @@
             );
         }
 
-        function CoreAssociatesView({ coreAssociates, onAddCoreAssociate, onRemoveCoreAssociate }) {
+        const AVAILABLE_FLAGS = [
+            { id: 'sitdown', label: 'Sit-Down', className: 'flag-sitdown' },
+            { id: 'sanitation', label: 'Sanitation', className: 'flag-sanitation' },
+            { id: 'office', label: 'Office Support', className: 'flag-office' },
+            { id: 'high', label: 'High Performer', className: 'flag-high' },
+            { id: 'low', label: 'Low Performer', className: 'flag-low' }
+        ];
+
+        function FlagsDropdown({ flags = [], onChange }) {
+            const [isOpen, setIsOpen] = useState(false);
+            const dropdownRef = useRef(null);
+
+            useEffect(() => {
+                const handleClickOutside = (event) => {
+                    if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                        setIsOpen(false);
+                    }
+                };
+
+                if (isOpen) {
+                    document.addEventListener('mousedown', handleClickOutside);
+                }
+
+                return () => {
+                    document.removeEventListener('mousedown', handleClickOutside);
+                };
+            }, [isOpen]);
+
+            const toggleFlag = (flagId) => {
+                const newFlags = flags.includes(flagId)
+                    ? flags.filter(f => f !== flagId)
+                    : [...flags, flagId];
+                onChange(newFlags);
+            };
+
+            return (
+                <div className="flag-dropdown" ref={dropdownRef}>
+                    <button
+                        type="button"
+                        className="btn btn-secondary btn-small"
+                        onClick={() => setIsOpen(!isOpen)}
+                        style={{ fontSize: '11px' }}
+                    >
+                        Edit Flags ({flags.length})
+                    </button>
+                    {isOpen && (
+                        <div className="flag-dropdown-content">
+                            {AVAILABLE_FLAGS.map(flag => (
+                                <div key={flag.id} className="flag-option">
+                                    <input
+                                        type="checkbox"
+                                        checked={flags.includes(flag.id)}
+                                        onChange={() => toggleFlag(flag.id)}
+                                    />
+                                    <label style={{ cursor: 'pointer', flex: 1 }} onClick={() => toggleFlag(flag.id)}>
+                                        {flag.label}
+                                    </label>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function CoreAssociatesView({ coreAssociates, onAddCoreAssociate, onRemoveCoreAssociate, onUpdateCoreAssociate }) {
             const [selectedLead, setSelectedLead] = useState('');
             const [newLead, setNewLead] = useState('');
             const [newName, setNewName] = useState('');
-            const [newNotes, setNewNotes] = useState('');
+            const [newFlags, setNewFlags] = useState([]);
+            const [filterFlags, setFilterFlags] = useState([]);
+            const [sortBy, setSortBy] = useState('name'); // 'name' or flag id
 
             const allLeads = Object.keys(coreAssociates);
             const currentLead = selectedLead || newLead;
             const currentAssociates = coreAssociates[currentLead] || [];
+
+            // Convert old notes format to flags format
+            const associatesWithFlags = currentAssociates.map(assoc => {
+                if (!assoc.flags && assoc.notes) {
+                    // Legacy support: convert notes to empty flags array
+                    return { ...assoc, flags: [] };
+                }
+                return { ...assoc, flags: assoc.flags || [] };
+            });
+
+            // Filter associates
+            let filteredAssociates = associatesWithFlags;
+            if (filterFlags.length > 0) {
+                filteredAssociates = associatesWithFlags.filter(assoc =>
+                    filterFlags.every(flag => assoc.flags.includes(flag))
+                );
+            }
+
+            // Sort associates
+            filteredAssociates = [...filteredAssociates].sort((a, b) => {
+                if (sortBy === 'name') {
+                    return a.name.localeCompare(b.name);
+                } else {
+                    // Sort by flag (those with the flag first)
+                    const aHasFlag = a.flags.includes(sortBy) ? 1 : 0;
+                    const bHasFlag = b.flags.includes(sortBy) ? 1 : 0;
+                    return bHasFlag - aHasFlag;
+                }
+            });
 
             const handleAddAssociate = (e) => {
                 e.preventDefault();
                 if (currentLead && newName) {
                     onAddCoreAssociate(currentLead, {
                         name: newName,
-                        notes: newNotes
+                        flags: newFlags
                     });
                     setNewName('');
-                    setNewNotes('');
+                    setNewFlags([]);
                     if (newLead) {
                         setSelectedLead(newLead);
                         setNewLead('');
@@ -1342,12 +1707,16 @@
                 }
             };
 
+            const handleUpdateAssociateFlags = (index, newFlags) => {
+                onUpdateCoreAssociate(currentLead, index, { flags: newFlags });
+            };
+
             return (
                 <div className="setup-form">
                     <div className="form-section">
                         <h3>Manage Core Associates</h3>
                         <p style={{ color: '#6b7280', marginBottom: '12px', fontSize: '12px' }}>
-                            Core associates are team members assigned to specific line leads.
+                            Core associates are team members assigned to specific line leads. Tag them with skills and attributes.
                         </p>
 
                         <div className="form-grid">
@@ -1398,13 +1767,8 @@
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Notes (Optional)</label>
-                                            <input
-                                                type="text"
-                                                value={newNotes}
-                                                onChange={(e) => setNewNotes(e.target.value)}
-                                                placeholder="e.g., Certified trainer"
-                                            />
+                                            <label>Flags</label>
+                                            <FlagsDropdown flags={newFlags} onChange={setNewFlags} />
                                         </div>
                                     </div>
                                     <button type="submit" className="btn btn-success">
@@ -1412,28 +1776,90 @@
                                     </button>
                                 </form>
 
+                                {currentAssociates.length > 0 && (
+                                    <div className="filter-controls">
+                                        <div className="filter-row">
+                                            <span className="filter-label">Sort by:</span>
+                                            <select
+                                                value={sortBy}
+                                                onChange={(e) => setSortBy(e.target.value)}
+                                                style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid #d1d5db' }}
+                                            >
+                                                <option value="name">Name</option>
+                                                {AVAILABLE_FLAGS.map(flag => (
+                                                    <option key={flag.id} value={flag.id}>{flag.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="filter-row" style={{ marginTop: '8px' }}>
+                                            <span className="filter-label">Filter by flags:</span>
+                                            {AVAILABLE_FLAGS.map(flag => (
+                                                <label key={flag.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', cursor: 'pointer' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={filterFlags.includes(flag.id)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setFilterFlags([...filterFlags, flag.id]);
+                                                            } else {
+                                                                setFilterFlags(filterFlags.filter(f => f !== flag.id));
+                                                            }
+                                                        }}
+                                                    />
+                                                    {flag.label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="core-associates-list">
                                     {currentAssociates.length === 0 ? (
                                         <p style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '12px' }}>
                                             No core associates yet for this lead.
                                         </p>
+                                    ) : filteredAssociates.length === 0 ? (
+                                        <p style={{ color: '#6b7280', fontStyle: 'italic', fontSize: '12px' }}>
+                                            No associates match the selected filters.
+                                        </p>
                                     ) : (
-                                        currentAssociates.map((associate, index) => (
-                                            <div key={index} className="core-associate-item">
-                                                <div className="core-associate-info">
-                                                    <div className="core-associate-name">{associate.name}</div>
-                                                    {associate.notes && (
-                                                        <div className="core-associate-notes">{associate.notes}</div>
-                                                    )}
+                                        filteredAssociates.map((associate, filteredIndex) => {
+                                            // Find the original index
+                                            const originalIndex = currentAssociates.findIndex(a => a.name === associate.name);
+                                            return (
+                                                <div key={originalIndex} className="core-associate-item">
+                                                    <div className="core-associate-info">
+                                                        <div className="core-associate-name">{associate.name}</div>
+                                                        <div className="core-associate-flags">
+                                                            {associate.flags && associate.flags.length > 0 ? (
+                                                                associate.flags.map(flagId => {
+                                                                    const flag = AVAILABLE_FLAGS.find(f => f.id === flagId);
+                                                                    return flag ? (
+                                                                        <span key={flagId} className={`flag-badge ${flag.className}`}>
+                                                                            {flag.label}
+                                                                        </span>
+                                                                    ) : null;
+                                                                })
+                                                            ) : (
+                                                                <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>No flags</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
+                                                        <FlagsDropdown
+                                                            flags={associate.flags}
+                                                            onChange={(newFlags) => handleUpdateAssociateFlags(originalIndex, newFlags)}
+                                                        />
+                                                        <button
+                                                            className="btn btn-danger btn-small"
+                                                            onClick={() => onRemoveCoreAssociate(currentLead, originalIndex)}
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <button
-                                                    className="btn btn-danger btn-small"
-                                                    onClick={() => onRemoveCoreAssociate(currentLead, index)}
-                                                >
-                                                    Remove
-                                                </button>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     )}
                                 </div>
                             </div>
