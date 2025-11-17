@@ -721,6 +721,7 @@
             background: #e0e7ff;
             border-color: #667eea;
             border-width: 2px;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
         }
 
         .waitlist-item.dragging {
@@ -730,6 +731,23 @@
         .waitlist-item.drag-over {
             background: #e0e7ff;
             border-color: #667eea;
+        }
+
+        .drag-preview {
+            position: absolute;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 4px;
+            padding: 4px 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            opacity: 0.9;
+            pointer-events: none;
+            z-index: 9999;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            font-size: 12px;
+            width: 180px;
         }
 
         .quick-add-modal {
@@ -1201,6 +1219,30 @@
             const handleDragStart = (e, source) => {
                 e.dataTransfer.effectAllowed = 'move';
                 e.dataTransfer.setData('application/json', JSON.stringify(source));
+
+                // Create custom drag preview
+                const dragPreview = document.createElement('div');
+                dragPreview.className = 'drag-preview';
+
+                // Get the name being dragged
+                let dragName = '';
+                if (source.type === 'waitlist') {
+                    const item = waitlist.find(w => w.id === source.id);
+                    dragName = item?.name || '';
+                } else if (source.type === 'position') {
+                    const line = lines.find(l => l.id === source.lineId);
+                    const position = line?.positions.find(p => p.id === source.positionId);
+                    dragName = position?.name || '';
+                }
+
+                dragPreview.innerHTML = `
+                    <div style="min-width: 18px; font-size: 11px; font-weight: 600; color: #6b7280; text-align: center;">⋮⋮</div>
+                    <div style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${dragName}</div>
+                `;
+                dragPreview.style.left = '-9999px';
+                document.body.appendChild(dragPreview);
+                e.dataTransfer.setDragImage(dragPreview, 0, 0);
+                setTimeout(() => document.body.removeChild(dragPreview), 0);
             };
 
             const handleDragOver = (e) => {
@@ -1224,9 +1266,26 @@
                 if (source.type === 'waitlist' && target.type === 'position') {
                     // Move from waitlist to position
                     const waitlistItem = waitlist.find(w => w.id === source.id);
-                    if (waitlistItem) {
+                    const targetLine = lines.find(l => l.id === target.lineId);
+                    const targetPosition = targetLine?.positions.find(p => p.id === target.positionId);
+
+                    if (waitlistItem && targetPosition) {
+                        // If target position is filled, move that person to waitlist first
+                        if (targetPosition.name.trim()) {
+                            setWaitlist(prev => [
+                                ...prev.filter(w => w.id !== source.id),
+                                {
+                                    id: Date.now() + Math.random(),
+                                    name: targetPosition.name,
+                                    isNew: targetPosition.isNew
+                                }
+                            ]);
+                        } else {
+                            // Just remove from waitlist
+                            handleRemoveWaitlistItem(source.id);
+                        }
+                        // Assign waitlist person to position
                         handleUpdatePosition(target.lineId, target.positionId, waitlistItem.name, waitlistItem.isNew);
-                        handleRemoveWaitlistItem(source.id);
                     }
                 } else if (source.type === 'position' && target.type === 'waitlist') {
                     // Move from position to waitlist
@@ -1241,17 +1300,29 @@
                         handleUpdatePosition(source.lineId, source.positionId, '', false);
                     }
                 } else if (source.type === 'position' && target.type === 'position') {
-                    // Swap positions
-                    const sourceLine = lines.find(l => l.id === source.lineId);
-                    const targetLine = lines.find(l => l.id === target.lineId);
-                    const sourcePosition = sourceLine?.positions.find(p => p.id === source.positionId);
-                    const targetPosition = targetLine?.positions.find(p => p.id === target.positionId);
-
-                    if (sourcePosition && targetPosition) {
-                        // Swap the names and isNew status
-                        handleUpdatePosition(target.lineId, target.positionId, sourcePosition.name, sourcePosition.isNew);
-                        handleUpdatePosition(source.lineId, source.positionId, targetPosition.name, targetPosition.isNew);
-                    }
+                    // Swap positions - use a single state update to avoid race conditions
+                    setLines(prev => prev.map(line => {
+                        if (line.id === source.lineId || line.id === target.lineId) {
+                            return {
+                                ...line,
+                                positions: line.positions.map(pos => {
+                                    if (line.id === source.lineId && pos.id === source.positionId) {
+                                        // Replace source with target
+                                        const targetLine = prev.find(l => l.id === target.lineId);
+                                        const targetPos = targetLine?.positions.find(p => p.id === target.positionId);
+                                        return targetPos ? { ...pos, name: targetPos.name, isNew: targetPos.isNew } : pos;
+                                    } else if (line.id === target.lineId && pos.id === target.positionId) {
+                                        // Replace target with source
+                                        const sourceLine = prev.find(l => l.id === source.lineId);
+                                        const sourcePos = sourceLine?.positions.find(p => p.id === source.positionId);
+                                        return sourcePos ? { ...pos, name: sourcePos.name, isNew: sourcePos.isNew } : pos;
+                                    }
+                                    return pos;
+                                })
+                            };
+                        }
+                        return line;
+                    }));
                 }
             };
 
