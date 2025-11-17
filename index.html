@@ -732,6 +732,85 @@
             border-color: #667eea;
         }
 
+        .quick-add-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .quick-add-content {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .quick-add-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .quick-add-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .quick-add-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .quick-add-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .quick-add-hint {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 16px;
+        }
+
+        .quick-add-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 16px;
+        }
+
+        .quick-add-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            background: #f9fafb;
+            border-radius: 4px;
+            margin-bottom: 4px;
+        }
+
+        .quick-add-item:last-child {
+            margin-bottom: 0;
+        }
+
         .search-box {
             width: 100%;
             padding: 10px 12px;
@@ -1057,6 +1136,15 @@
                 }]);
             };
 
+            const handleQuickAddWaitlist = (names) => {
+                const newItems = names.map(name => ({
+                    id: Date.now() + Math.random(),
+                    name: name,
+                    isNew: false
+                }));
+                setWaitlist(prev => [...prev, ...newItems]);
+            };
+
             const handleRemoveWaitlistItem = (itemId) => {
                 setWaitlist(prev => prev.filter(item => item.id !== itemId));
             };
@@ -1378,6 +1466,7 @@
                                 onUpdatePosition={handleUpdatePosition}
                                 onUpdateWaitlistItem={handleUpdateWaitlistItem}
                                 onAddWaitlistItem={handleAddWaitlistItem}
+                                onQuickAddWaitlist={handleQuickAddWaitlist}
                                 onRemoveWaitlistItem={handleRemoveWaitlistItem}
                                 onAddLine={handleAddLine}
                                 onRemoveLine={handleRemoveLine}
@@ -1423,6 +1512,7 @@
             onUpdatePosition,
             onUpdateWaitlistItem,
             onAddWaitlistItem,
+            onQuickAddWaitlist,
             onRemoveWaitlistItem,
             onAddLine,
             onRemoveLine,
@@ -1432,6 +1522,45 @@
             onDragOver,
             onDrop
         }) {
+            const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+            const [quickAddInput, setQuickAddInput] = useState('');
+            const [quickAddNames, setQuickAddNames] = useState([]);
+            const quickAddInputRef = useRef(null);
+
+            useEffect(() => {
+                if (isQuickAddOpen && quickAddInputRef.current) {
+                    quickAddInputRef.current.focus();
+                }
+            }, [isQuickAddOpen]);
+
+            const handleQuickAddKeyPress = (e) => {
+                if (e.key === 'Enter' && quickAddInput.trim()) {
+                    setQuickAddNames([...quickAddNames, quickAddInput.trim()]);
+                    setQuickAddInput('');
+                } else if (e.key === 'Escape') {
+                    handleCancelQuickAdd();
+                }
+            };
+
+            const handleRemoveQuickAddName = (index) => {
+                setQuickAddNames(quickAddNames.filter((_, i) => i !== index));
+            };
+
+            const handleConfirmQuickAdd = () => {
+                if (quickAddNames.length > 0) {
+                    onQuickAddWaitlist(quickAddNames);
+                }
+                setIsQuickAddOpen(false);
+                setQuickAddInput('');
+                setQuickAddNames([]);
+            };
+
+            const handleCancelQuickAdd = () => {
+                setIsQuickAddOpen(false);
+                setQuickAddInput('');
+                setQuickAddNames([]);
+            };
+
             if (lines.length === 0) {
                 return (
                     <div className="empty-state">
@@ -1506,13 +1635,21 @@
                         >
                             <div className="waitlist-header">
                                 WAITLIST ({waitlist.filter(w => w.name.trim()).length})
-                                <button
-                                    className="btn btn-success btn-small"
-                                    onClick={onAddWaitlistItem}
-                                    style={{ marginLeft: '8px' }}
-                                >
-                                    + Add
-                                </button>
+                                <div style={{ display: 'flex', gap: '4px', marginLeft: '8px' }}>
+                                    <button
+                                        className="btn btn-primary btn-small"
+                                        onClick={() => setIsQuickAddOpen(true)}
+                                        style={{ fontSize: '11px' }}
+                                    >
+                                        Quick Add
+                                    </button>
+                                    <button
+                                        className="btn btn-success btn-small"
+                                        onClick={onAddWaitlistItem}
+                                    >
+                                        + Add
+                                    </button>
+                                </div>
                             </div>
                             <div className="waitlist-items">
                                 {waitlist.map((item, idx) => (
@@ -1558,6 +1695,77 @@
                             </div>
                         </div>
                     </div>
+
+                    {/* Quick Add Modal */}
+                    {isQuickAddOpen && (
+                        <div className="quick-add-modal" onClick={handleCancelQuickAdd}>
+                            <div className="quick-add-content" onClick={(e) => e.stopPropagation()}>
+                                <div className="quick-add-header">
+                                    <h3 className="quick-add-title">Quick Add to Waitlist</h3>
+                                    <button
+                                        className="btn btn-secondary btn-small"
+                                        onClick={handleCancelQuickAdd}
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+
+                                <input
+                                    ref={quickAddInputRef}
+                                    type="text"
+                                    className="quick-add-input"
+                                    value={quickAddInput}
+                                    onChange={(e) => setQuickAddInput(e.target.value)}
+                                    onKeyDown={handleQuickAddKeyPress}
+                                    placeholder="Type a name and press Enter..."
+                                />
+
+                                <div className="quick-add-hint">
+                                    Press Enter to add • Press Escape to close
+                                </div>
+
+                                {quickAddNames.length > 0 && (
+                                    <div className="quick-add-list">
+                                        {quickAddNames.map((name, index) => (
+                                            <div key={index} className="quick-add-item">
+                                                <span style={{ fontWeight: '500' }}>
+                                                    {index + 1}. {name}
+                                                </span>
+                                                <button
+                                                    className="btn btn-danger btn-small"
+                                                    onClick={() => handleRemoveQuickAddName(index)}
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {quickAddNames.length === 0 && (
+                                    <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af', fontSize: '13px', fontStyle: 'italic' }}>
+                                        No names added yet
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={handleCancelQuickAdd}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="btn btn-success"
+                                        onClick={handleConfirmQuickAdd}
+                                        disabled={quickAddNames.length === 0}
+                                    >
+                                        Add {quickAddNames.length} to Waitlist
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </>
             );
         }
