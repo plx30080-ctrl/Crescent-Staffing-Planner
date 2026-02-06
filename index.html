@@ -1045,6 +1045,7 @@
             const [lines, setLines] = useState([]);
             const [waitlist, setWaitlist] = useState([]);
             const [coreAssociates, setCoreAssociates] = useState({});
+            const [lineLeadNotes, setLineLeadNotes] = useState({});
             const [saveStatus, setSaveStatus] = useState('');
             const [firebaseStatus, setFirebaseStatus] = useState(isFirebaseConfigured ? 'connected' : 'offline');
             const [isLocked, setIsLocked] = useState(false);
@@ -1061,6 +1062,7 @@
                                 const data = snapshot.val();
                                 console.log('Loaded core associates from Firebase Realtime Database');
                                 setCoreAssociates(data.associates || {});
+                                setLineLeadNotes(data.notes || {});
                                 return;
                             }
                         } catch (error) {
@@ -1071,18 +1073,22 @@
                     // Fallback to localStorage
                     const savedCoreAssociates = storage.load('coreAssociates', {});
                     setCoreAssociates(savedCoreAssociates);
+                    const savedNotes = storage.load('lineLeadNotes', {});
+                    setLineLeadNotes(savedNotes);
                 };
                 loadCoreAssociates();
             }, []);
 
-            // Save core associates to both localStorage and Firebase
+            // Save core associates and notes to both localStorage and Firebase
             useEffect(() => {
                 storage.save('coreAssociates', coreAssociates);
+                storage.save('lineLeadNotes', lineLeadNotes);
 
                 // Also save to Firebase
                 if (isFirebaseConfigured && db && Object.keys(coreAssociates).length > 0) {
                     db.ref('settings/coreAssociates').set({
                         associates: coreAssociates,
+                        notes: lineLeadNotes,
                         lastUpdated: new Date().toISOString()
                     }).then(() => {
                         console.log('Core associates saved to Firebase Realtime Database');
@@ -1090,7 +1096,7 @@
                         console.error('Error saving core associates to Firebase:', error);
                     });
                 }
-            }, [coreAssociates]);
+            }, [coreAssociates, lineLeadNotes]);
 
             // Auto-save functionality
             useEffect(() => {
@@ -1452,6 +1458,11 @@
                     if (line.id === lineId) {
                         const updatedLine = { ...line, ...updates };
 
+                        // If positions were explicitly provided (from core member sync), use them directly
+                        if (updates.positions) {
+                            return updatedLine;
+                        }
+
                         // If needed count changed, adjust positions array
                         if (updates.needed !== undefined && updates.needed !== line.positions.length) {
                             const newNeeded = parseInt(updates.needed) || 0;
@@ -1505,7 +1516,46 @@
                         delete updated[lead];
                         return updated;
                     });
+                    setLineLeadNotes(prev => {
+                        const updated = { ...prev };
+                        delete updated[lead];
+                        return updated;
+                    });
                 }
+            };
+
+            const handleRenameLineLead = (oldName, newName) => {
+                if (!newName.trim() || newName === oldName) return;
+                if (coreAssociates[newName]) {
+                    alert(`A line lead named "${newName}" already exists.`);
+                    return;
+                }
+                setCoreAssociates(prev => {
+                    const updated = {};
+                    Object.keys(prev).forEach(key => {
+                        if (key === oldName) {
+                            updated[newName] = prev[key];
+                        } else {
+                            updated[key] = prev[key];
+                        }
+                    });
+                    return updated;
+                });
+                setLineLeadNotes(prev => {
+                    const updated = {};
+                    Object.keys(prev).forEach(key => {
+                        if (key === oldName) {
+                            updated[newName] = prev[key];
+                        } else {
+                            updated[key] = prev[key];
+                        }
+                    });
+                    return updated;
+                });
+            };
+
+            const handleUpdateLineLeadNotes = (lead, notes) => {
+                setLineLeadNotes(prev => ({ ...prev, [lead]: notes }));
             };
 
             const handleExport = () => {
@@ -1820,6 +1870,7 @@
                                 currentShift={currentShift}
                                 saveStatus={saveStatus}
                                 isLocked={isLocked}
+                                coreAssociates={coreAssociates}
                                 onToggleLock={handleToggleLock}
                                 onUpdatePosition={handleUpdatePosition}
                                 onUpdateWaitlistItem={handleUpdateWaitlistItem}
@@ -1850,10 +1901,13 @@
                         {activeTab === 'core' && (
                             <CoreAssociatesView
                                 coreAssociates={coreAssociates}
+                                lineLeadNotes={lineLeadNotes}
                                 onAddCoreAssociate={handleAddCoreAssociate}
                                 onRemoveCoreAssociate={handleRemoveCoreAssociate}
                                 onUpdateCoreAssociate={handleUpdateCoreAssociate}
                                 onDeleteLineLead={handleDeleteLineLead}
+                                onRenameLineLead={handleRenameLineLead}
+                                onUpdateLineLeadNotes={handleUpdateLineLeadNotes}
                                 firebaseStatus={firebaseStatus}
                             />
                         )}
@@ -1869,6 +1923,7 @@
             currentShift,
             saveStatus,
             isLocked,
+            coreAssociates,
             onToggleLock,
             onUpdatePosition,
             onUpdateWaitlistItem,
@@ -1987,6 +2042,7 @@
                                     key={line.id}
                                     line={line}
                                     isLocked={isLocked}
+                                    coreAssociates={coreAssociates}
                                     onUpdatePosition={onUpdatePosition}
                                     onUpdateLine={onUpdateLine}
                                     onRemoveLine={onRemoveLine}
@@ -2153,7 +2209,7 @@
             );
         }
 
-        function LineColumn({ line, isLocked, onUpdatePosition, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop }) {
+        function LineColumn({ line, isLocked, coreAssociates, onUpdatePosition, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop }) {
             const [isEditing, setIsEditing] = useState(false);
             const [editLetter, setEditLetter] = useState(line.letter);
             const [editLeads, setEditLeads] = useState((line.leads || []).join(', '));
@@ -2163,11 +2219,121 @@
             const leads = line.leads || (line.lead ? [line.lead] : []);
 
             const handleSaveEdit = () => {
-                const leadsArray = editLeads.split(',').map(l => l.trim()).filter(l => l);
+                const newLeadsArray = editLeads.split(',').map(l => l.trim()).filter(l => l);
+                const oldLeadsArray = line.leads || [];
+                const newNeeded = parseInt(editNeeded) || line.needed;
+
+                // Find added and removed leads
+                const addedLeads = newLeadsArray.filter(l => !oldLeadsArray.includes(l));
+                const removedLeads = oldLeadsArray.filter(l => !newLeadsArray.includes(l));
+
+                // Collect core members to add from new leads
+                const coreToAdd = [];
+                addedLeads.forEach(lead => {
+                    const members = (coreAssociates || {})[lead] || [];
+                    members.forEach(m => {
+                        // Don't add if already on this line
+                        if (!line.positions.some(p => p.name.trim().toLowerCase() === m.name.trim().toLowerCase())) {
+                            coreToAdd.push(m.name);
+                        }
+                    });
+                });
+
+                // Collect core member names from removed leads
+                const coreToRemove = [];
+                removedLeads.forEach(lead => {
+                    const members = (coreAssociates || {})[lead] || [];
+                    members.forEach(m => {
+                        // Only remove if they're actually on this line
+                        if (line.positions.some(p => p.name.trim().toLowerCase() === m.name.trim().toLowerCase())) {
+                            coreToRemove.push(m.name.toLowerCase());
+                        }
+                    });
+                });
+
+                // Handle removed leads' core members
+                let updatedPositions = [...line.positions];
+                if (coreToRemove.length > 0) {
+                    const shouldRemove = confirm(
+                        `The following core members belong to removed lead(s):\n${coreToRemove.map(n => '  - ' + n).join('\n')}\n\nRemove them from this line?`
+                    );
+                    if (shouldRemove) {
+                        updatedPositions = updatedPositions.map(p => {
+                            if (coreToRemove.includes(p.name.trim().toLowerCase())) {
+                                return { ...p, name: '', isNew: false };
+                            }
+                            return p;
+                        });
+                    }
+                }
+
+                // Handle added leads' core members - fill empty slots
+                if (coreToAdd.length > 0) {
+                    let addIndex = 0;
+                    // First pass: adjust positions count if needed
+                    let totalNeeded = newNeeded;
+                    const currentFilled = updatedPositions.filter(p => p.name.trim()).length;
+                    const emptySlots = updatedPositions.filter(p => !p.name.trim()).length;
+
+                    if (coreToAdd.length > emptySlots) {
+                        // Need more positions
+                        totalNeeded = Math.max(newNeeded, currentFilled + coreToAdd.length);
+                    }
+
+                    // Fill empty positions with core members
+                    updatedPositions = updatedPositions.map(p => {
+                        if (!p.name.trim() && addIndex < coreToAdd.length) {
+                            const name = coreToAdd[addIndex];
+                            addIndex++;
+                            return { ...p, name: name, isNew: false };
+                        }
+                        return p;
+                    });
+
+                    // If we still have members to add, create new positions
+                    while (addIndex < coreToAdd.length) {
+                        updatedPositions.push({
+                            id: Date.now() + Math.random() + addIndex,
+                            name: coreToAdd[addIndex],
+                            isNew: false
+                        });
+                        addIndex++;
+                        totalNeeded = Math.max(totalNeeded, updatedPositions.length);
+                    }
+
+                    // Update needed count if we added positions
+                    if (totalNeeded > newNeeded) {
+                        onUpdateLine(line.id, {
+                            letter: editLetter,
+                            leads: newLeadsArray,
+                            needed: totalNeeded,
+                            positions: updatedPositions
+                        });
+                        setEditNeeded(totalNeeded);
+                        setIsEditing(false);
+                        return;
+                    }
+                }
+
+                // Adjust positions array for needed count changes
+                if (newNeeded > updatedPositions.length) {
+                    const additionalPositions = Array(newNeeded - updatedPositions.length)
+                        .fill(null)
+                        .map((_, idx) => ({
+                            id: Date.now() + Math.random() + idx,
+                            name: '',
+                            isNew: false
+                        }));
+                    updatedPositions = [...updatedPositions, ...additionalPositions];
+                } else if (newNeeded < updatedPositions.length) {
+                    updatedPositions = updatedPositions.slice(0, newNeeded);
+                }
+
                 onUpdateLine(line.id, {
                     letter: editLetter,
-                    leads: leadsArray,
-                    needed: parseInt(editNeeded) || line.needed
+                    leads: newLeadsArray,
+                    needed: newNeeded,
+                    positions: updatedPositions
                 });
                 setIsEditing(false);
             };
@@ -2463,6 +2629,8 @@
         function ReportingView({ onLoadShift }) {
             const [reports, setReports] = useState([]);
             const [loading, setLoading] = useState(false);
+            const [searchDate, setSearchDate] = useState('');
+            const [collapsedMonths, setCollapsedMonths] = useState({});
 
             useEffect(() => {
                 loadReports();
@@ -2501,7 +2669,6 @@
                     const data = storage.load(key);
                     const reportId = `${data.date}_${data.shift}`;
                     if (data && !reportsList.find(r => r.id === reportId)) {
-                        // This report is only in localStorage, not synced to cloud
                         reportsList.push({ id: reportId, ...data, syncedToCloud: false });
                     }
                 });
@@ -2517,58 +2684,201 @@
                 setLoading(false);
             };
 
+            // Get current week boundaries (Sunday to Saturday)
+            const getWeekBounds = () => {
+                const now = new Date();
+                const dayOfWeek = now.getDay();
+                const startOfWeek = new Date(now);
+                startOfWeek.setDate(now.getDate() - dayOfWeek);
+                startOfWeek.setHours(0, 0, 0, 0);
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(startOfWeek.getDate() + 6);
+                endOfWeek.setHours(23, 59, 59, 999);
+                return { start: startOfWeek, end: endOfWeek };
+            };
+
+            const getMonthKey = (dateStr) => {
+                const d = new Date(dateStr + 'T00:00:00');
+                return d.toLocaleString('default', { month: 'long', year: 'numeric' });
+            };
+
+            const toggleMonth = (monthKey) => {
+                setCollapsedMonths(prev => ({ ...prev, [monthKey]: !prev[monthKey] }));
+            };
+
+            const renderReportItem = (report) => {
+                const totalPositions = (report.lines || []).reduce((sum, line) => sum + line.needed, 0);
+                const filledPositions = (report.lines || []).reduce((sum, line) =>
+                    sum + line.positions.filter(p => p.name && p.name.trim()).length, 0
+                );
+
+                return (
+                    <div
+                        key={report.id}
+                        className="report-item"
+                        onClick={() => onLoadShift(report.date, report.shift)}
+                    >
+                        <h4>
+                            {report.date} - {report.shift} Shift
+                            {report.syncedToCloud ? (
+                                <span className="cloud-badge synced">☁ Synced</span>
+                            ) : (
+                                <span className="cloud-badge local-only">📱 Local Only</span>
+                            )}
+                        </h4>
+                        <p>
+                            {filledPositions} / {totalPositions} positions filled
+                            {report.waitlist && report.waitlist.length > 0 && ` • ${report.waitlist.filter(w => w.name && w.name.trim()).length} waiting`}
+                        </p>
+                        {report.lastUpdated && (
+                            <p style={{ fontSize: '11px', marginTop: '4px' }}>
+                                Last updated: {new Date(report.lastUpdated).toLocaleString()}
+                            </p>
+                        )}
+                    </div>
+                );
+            };
+
+            // Filter reports by search date
+            const filteredReports = searchDate
+                ? reports.filter(r => r.date === searchDate)
+                : reports;
+
+            // Split into current week and older
+            const weekBounds = getWeekBounds();
+            const thisWeekReports = filteredReports.filter(r => {
+                const d = new Date(r.date + 'T00:00:00');
+                return d >= weekBounds.start && d <= weekBounds.end;
+            });
+            const olderReports = filteredReports.filter(r => {
+                const d = new Date(r.date + 'T00:00:00');
+                return d < weekBounds.start;
+            });
+
+            // Group older reports by month
+            const monthGroups = {};
+            olderReports.forEach(r => {
+                const key = getMonthKey(r.date);
+                if (!monthGroups[key]) monthGroups[key] = [];
+                monthGroups[key].push(r);
+            });
+            const sortedMonthKeys = Object.keys(monthGroups).sort((a, b) => {
+                // Sort descending by parsing month/year
+                const da = new Date(monthGroups[a][0].date + 'T00:00:00');
+                const db2 = new Date(monthGroups[b][0].date + 'T00:00:00');
+                return db2 - da;
+            });
+
             return (
                 <div>
                     <div className="report-controls">
                         <h3 style={{ marginBottom: '8px' }}>Saved Staffing Reports</h3>
-                        <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                        <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
                             View and load previous staffing sheets
                         </p>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div className="form-group" style={{ margin: 0, flex: '0 0 auto' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Search by Date</label>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <input
+                                        type="date"
+                                        value={searchDate}
+                                        onChange={(e) => setSearchDate(e.target.value)}
+                                        style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px' }}
+                                    />
+                                    {searchDate && (
+                                        <button
+                                            className="btn btn-secondary btn-small"
+                                            onClick={() => setSearchDate('')}
+                                        >
+                                            Clear
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                                {filteredReports.length} report{filteredReports.length !== 1 ? 's' : ''} found
+                            </div>
+                        </div>
                     </div>
 
                     {loading ? (
                         <div className="empty-state">
                             <p>Loading reports...</p>
                         </div>
-                    ) : reports.length === 0 ? (
+                    ) : filteredReports.length === 0 ? (
                         <div className="empty-state">
-                            <h3>No Reports Available</h3>
-                            <p>Staffing sheets will appear here after you save them.</p>
+                            <h3>{searchDate ? 'No Reports Found' : 'No Reports Available'}</h3>
+                            <p>{searchDate ? `No staffing sheets found for ${searchDate}.` : 'Staffing sheets will appear here after you save them.'}</p>
                         </div>
                     ) : (
-                        <div className="report-list">
-                            {reports.map(report => {
-                                const totalPositions = report.lines.reduce((sum, line) => sum + line.needed, 0);
-                                const filledPositions = report.lines.reduce((sum, line) =>
-                                    sum + line.positions.filter(p => p.name && p.name.trim()).length, 0
-                                );
-
-                                return (
-                                    <div
-                                        key={report.id}
-                                        className="report-item"
-                                        onClick={() => onLoadShift(report.date, report.shift)}
-                                    >
-                                        <h4>
-                                            {report.date} - {report.shift} Shift
-                                            {report.syncedToCloud ? (
-                                                <span className="cloud-badge synced">☁ Synced</span>
-                                            ) : (
-                                                <span className="cloud-badge local-only">📱 Local Only</span>
-                                            )}
-                                        </h4>
-                                        <p>
-                                            {filledPositions} / {totalPositions} positions filled
-                                            {report.waitlist && report.waitlist.length > 0 && ` • ${report.waitlist.filter(w => w.name && w.name.trim()).length} waiting`}
-                                        </p>
-                                        {report.lastUpdated && (
-                                            <p style={{ fontSize: '11px', marginTop: '4px' }}>
-                                                Last updated: {new Date(report.lastUpdated).toLocaleString()}
-                                            </p>
-                                        )}
+                        <div>
+                            {/* This Week Section */}
+                            {!searchDate && thisWeekReports.length > 0 && (
+                                <div style={{ marginBottom: '24px' }}>
+                                    <h4 style={{ fontSize: '14px', color: '#111827', marginBottom: '10px', padding: '8px 12px', background: '#ecfdf5', borderRadius: '6px', border: '1px solid #10b981' }}>
+                                        This Week
+                                        <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6b7280', marginLeft: '8px' }}>
+                                            ({thisWeekReports.length} report{thisWeekReports.length !== 1 ? 's' : ''})
+                                        </span>
+                                    </h4>
+                                    <div className="report-list">
+                                        {thisWeekReports.map(renderReportItem)}
                                     </div>
-                                );
-                            })}
+                                </div>
+                            )}
+
+                            {/* Search results - show flat list */}
+                            {searchDate && (
+                                <div className="report-list">
+                                    {filteredReports.map(renderReportItem)}
+                                </div>
+                            )}
+
+                            {/* Older reports grouped by month */}
+                            {!searchDate && sortedMonthKeys.length > 0 && (
+                                <div>
+                                    {sortedMonthKeys.map(monthKey => {
+                                        const isCollapsed = collapsedMonths[monthKey] !== false; // collapsed by default
+                                        const monthReports = monthGroups[monthKey];
+                                        return (
+                                            <div key={monthKey} style={{ marginBottom: '12px' }}>
+                                                <button
+                                                    onClick={() => toggleMonth(monthKey)}
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '10px 12px',
+                                                        background: '#f3f4f6',
+                                                        border: '1px solid #d1d5db',
+                                                        borderRadius: '6px',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        fontSize: '14px',
+                                                        fontWeight: '600',
+                                                        color: '#374151',
+                                                        transition: 'background 0.2s'
+                                                    }}
+                                                >
+                                                    <span>{monthKey}</span>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <span style={{ fontSize: '12px', fontWeight: 'normal', color: '#6b7280' }}>
+                                                            {monthReports.length} report{monthReports.length !== 1 ? 's' : ''}
+                                                        </span>
+                                                        <span style={{ fontSize: '12px' }}>{isCollapsed ? '▶' : '▼'}</span>
+                                                    </span>
+                                                </button>
+                                                {!isCollapsed && (
+                                                    <div className="report-list" style={{ marginTop: '8px' }}>
+                                                        {monthReports.map(renderReportItem)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -2671,7 +2981,7 @@
             );
         }
 
-        function CoreAssociatesView({ coreAssociates, onAddCoreAssociate, onRemoveCoreAssociate, onUpdateCoreAssociate, onDeleteLineLead, firebaseStatus }) {
+        function CoreAssociatesView({ coreAssociates, lineLeadNotes, onAddCoreAssociate, onRemoveCoreAssociate, onUpdateCoreAssociate, onDeleteLineLead, onRenameLineLead, onUpdateLineLeadNotes, firebaseStatus }) {
             const [viewMode, setViewMode] = useState('byLead'); // 'byLead' or 'all'
             const [selectedLead, setSelectedLead] = useState('');
             const [newLead, setNewLead] = useState('');
@@ -2680,6 +2990,9 @@
             const [filterFlags, setFilterFlags] = useState([]);
             const [sortBy, setSortBy] = useState('name'); // 'name' or flag id
             const [searchQuery, setSearchQuery] = useState('');
+            const [isEditingLead, setIsEditingLead] = useState(false);
+            const [editLeadName, setEditLeadName] = useState('');
+            const [editLeadNotes, setEditLeadNotes] = useState('');
 
             const allLeads = Object.keys(coreAssociates);
 
@@ -2747,6 +3060,29 @@
 
             const handleUpdateAssociateFlags = (lead, index, newFlags) => {
                 onUpdateCoreAssociate(lead, index, { flags: newFlags });
+            };
+
+            const handleStartEditLead = () => {
+                setEditLeadName(selectedLead);
+                setEditLeadNotes((lineLeadNotes || {})[selectedLead] || '');
+                setIsEditingLead(true);
+            };
+
+            const handleSaveEditLead = () => {
+                const trimmedName = editLeadName.trim();
+                if (!trimmedName) return;
+                if (trimmedName !== selectedLead) {
+                    onRenameLineLead(selectedLead, trimmedName);
+                    setSelectedLead(trimmedName);
+                }
+                onUpdateLineLeadNotes(trimmedName, editLeadNotes);
+                setIsEditingLead(false);
+            };
+
+            const handleCancelEditLead = () => {
+                setIsEditingLead(false);
+                setEditLeadName('');
+                setEditLeadNotes('');
             };
 
             const filteredAssociates = getFilteredAssociates();
@@ -2822,17 +3158,65 @@
 
                                 {(selectedLead || newLead) && (
                                     <div style={{ marginTop: '20px' }}>
-                                        <div className="lead-header">
-                                            <h4 className="lead-title">Core Associates for {selectedLead || newLead}</h4>
-                                            {selectedLead && (
-                                                <button
-                                                    className="btn btn-danger btn-small"
-                                                    onClick={() => onDeleteLineLead(selectedLead)}
-                                                >
-                                                    Delete Line Lead
-                                                </button>
-                                            )}
-                                        </div>
+                                        {isEditingLead && selectedLead ? (
+                                            <div style={{ background: '#f0f2f5', border: '1px solid #d1d5db', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+                                                <h4 style={{ marginBottom: '12px', fontSize: '14px' }}>Edit Line Lead</h4>
+                                                <div className="form-grid">
+                                                    <div className="form-group">
+                                                        <label>Lead Name</label>
+                                                        <input
+                                                            type="text"
+                                                            value={editLeadName}
+                                                            onChange={(e) => setEditLeadName(e.target.value)}
+                                                            placeholder="Lead name"
+                                                        />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Notes</label>
+                                                        <textarea
+                                                            value={editLeadNotes}
+                                                            onChange={(e) => setEditLeadNotes(e.target.value)}
+                                                            placeholder="Notes about this line leader..."
+                                                            rows="3"
+                                                            style={{ resize: 'vertical' }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                                                    <button className="btn btn-success btn-small" onClick={handleSaveEditLead}>Save</button>
+                                                    <button className="btn btn-secondary btn-small" onClick={handleCancelEditLead}>Cancel</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="lead-header">
+                                                    <h4 className="lead-title">Core Associates for {selectedLead || newLead}</h4>
+                                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                                        {selectedLead && (
+                                                            <button
+                                                                className="btn btn-secondary btn-small"
+                                                                onClick={handleStartEditLead}
+                                                            >
+                                                                Edit Lead
+                                                            </button>
+                                                        )}
+                                                        {selectedLead && (
+                                                            <button
+                                                                className="btn btn-danger btn-small"
+                                                                onClick={() => onDeleteLineLead(selectedLead)}
+                                                            >
+                                                                Delete Lead
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {selectedLead && (lineLeadNotes || {})[selectedLead] && (
+                                                    <div style={{ background: '#fef9c3', border: '1px solid #fbbf24', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', fontSize: '12px', color: '#78350f' }}>
+                                                        <strong>Notes:</strong> {(lineLeadNotes || {})[selectedLead]}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
 
                                         <form onSubmit={handleAddAssociate}>
                                             <div className="form-grid">
