@@ -1212,7 +1212,14 @@
                     // Combine core associates from all leads
                     const allCoreAssociates = [];
                     leads.forEach(lead => {
-                        const coreList = coreAssociates[lead] || [];
+                        // Try exact match first, then case-insensitive match
+                        let coreList = coreAssociates[lead];
+                        if (!coreList) {
+                            const matchKey = Object.keys(coreAssociates).find(
+                                k => k.toLowerCase() === lead.toLowerCase()
+                            );
+                            coreList = matchKey ? coreAssociates[matchKey] : [];
+                        }
                         allCoreAssociates.push(...coreList);
                     });
 
@@ -2229,8 +2236,13 @@
 
                 // Collect core members to add from new leads
                 const coreToAdd = [];
+                const ca = coreAssociates || {};
                 addedLeads.forEach(lead => {
-                    const members = (coreAssociates || {})[lead] || [];
+                    let members = ca[lead];
+                    if (!members) {
+                        const matchKey = Object.keys(ca).find(k => k.toLowerCase() === lead.toLowerCase());
+                        members = matchKey ? ca[matchKey] : [];
+                    }
                     members.forEach(m => {
                         // Don't add if already on this line
                         if (!line.positions.some(p => p.name.trim().toLowerCase() === m.name.trim().toLowerCase())) {
@@ -2242,7 +2254,11 @@
                 // Collect core member names from removed leads
                 const coreToRemove = [];
                 removedLeads.forEach(lead => {
-                    const members = (coreAssociates || {})[lead] || [];
+                    let members = ca[lead];
+                    if (!members) {
+                        const matchKey = Object.keys(ca).find(k => k.toLowerCase() === lead.toLowerCase());
+                        members = matchKey ? ca[matchKey] : [];
+                    }
                     members.forEach(m => {
                         // Only remove if they're actually on this line
                         if (line.positions.some(p => p.name.trim().toLowerCase() === m.name.trim().toLowerCase())) {
@@ -2466,10 +2482,10 @@
         function SetupView({ onSetupShift, coreAssociates, initialDate, initialShift }) {
             const [date, setDate] = useState(initialDate);
             const [shift, setShift] = useState(initialShift);
-            const [lines, setLines] = useState([{ letter: '', lead: '', needed: '' }]);
+            const [lines, setLines] = useState([{ letter: '', leads: [], leadInput: '', needed: '' }]);
 
             const handleAddLine = () => {
-                setLines([...lines, { letter: '', lead: '', needed: '' }]);
+                setLines([...lines, { letter: '', leads: [], leadInput: '', needed: '' }]);
             };
 
             const handleRemoveLine = (index) => {
@@ -2520,9 +2536,9 @@
                     return; // Don't create a new sheet
                 }
 
-                const validLines = lines.filter(l => l.letter && l.lead && l.needed).map(l => ({
+                const validLines = lines.filter(l => l.letter && l.leads.length > 0 && l.needed).map(l => ({
                     ...l,
-                    leads: l.lead.split(',').map(lead => lead.trim()).filter(lead => lead)
+                    leads: l.leads
                 }));
                 if (validLines.length > 0) {
                     onSetupShift({ date, shift, lines: validLines });
@@ -2574,17 +2590,60 @@
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label>Line Lead(s) * <span style={{ fontSize: '10px', fontWeight: 'normal', opacity: '0.7' }}>(comma-separated for multiple)</span></label>
-                                    <input
-                                        type="text"
-                                        list="leads"
-                                        value={line.lead}
-                                        onChange={(e) => handleLineChange(index, 'lead', e.target.value)}
-                                        placeholder="John Doe, Jane Smith"
-                                        required
-                                    />
-                                    <datalist id="leads">
-                                        {allLeads.map(lead => (
+                                    <label>Line Lead(s) *</label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: line.leads.length > 0 ? '6px' : '0' }}>
+                                        {line.leads.map((lead, li) => (
+                                            <span key={li} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#667eea', color: 'white', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' }}>
+                                                {lead}
+                                                <button type="button" onClick={() => {
+                                                    const newLines = [...lines];
+                                                    newLines[index] = { ...newLines[index], leads: newLines[index].leads.filter((_, i) => i !== li) };
+                                                    setLines(newLines);
+                                                }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', lineHeight: '1', padding: '0 2px' }}>×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                        <input
+                                            type="text"
+                                            list={`leads-${index}`}
+                                            value={line.leadInput || ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                // Auto-add if user selected from datalist (exact match to a known lead)
+                                                if (allLeads.includes(val) && !line.leads.includes(val)) {
+                                                    const newLines = [...lines];
+                                                    newLines[index] = { ...newLines[index], leads: [...newLines[index].leads, val], leadInput: '' };
+                                                    setLines(newLines);
+                                                } else {
+                                                    handleLineChange(index, 'leadInput', val);
+                                                }
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const val = (line.leadInput || '').trim();
+                                                    if (val && !line.leads.includes(val)) {
+                                                        const newLines = [...lines];
+                                                        newLines[index] = { ...newLines[index], leads: [...newLines[index].leads, val], leadInput: '' };
+                                                        setLines(newLines);
+                                                    }
+                                                }
+                                            }}
+                                            placeholder={line.leads.length === 0 ? 'Type or select a lead name...' : 'Add another lead...'}
+                                            style={{ flex: 1 }}
+                                        />
+                                        <button type="button" className="btn btn-success btn-small" onClick={() => {
+                                            const val = (line.leadInput || '').trim();
+                                            if (val && !line.leads.includes(val)) {
+                                                const newLines = [...lines];
+                                                newLines[index] = { ...newLines[index], leads: [...newLines[index].leads, val], leadInput: '' };
+                                                setLines(newLines);
+                                            }
+                                        }}>Add</button>
+                                    </div>
+                                    <datalist id={`leads-${index}`}>
+                                        {allLeads.filter(l => !line.leads.includes(l)).map(lead => (
                                             <option key={lead} value={lead} />
                                         ))}
                                     </datalist>
