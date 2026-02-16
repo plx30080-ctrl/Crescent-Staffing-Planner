@@ -990,6 +990,83 @@
                 width: 100%;
             }
         }
+
+        @media print {
+            body { padding: 0; background: white; font-size: 11px; }
+            .header, .tabs, .firebase-status, .undo-banner, .bulk-action-bar,
+            .duplicate-warning button, .line-edit-controls, .lock-banner button { display: none !important; }
+            .container { box-shadow: none; border-radius: 0; }
+            .content { padding: 8px; }
+            .stats-bar { border: 1px solid #ccc; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            .stats-bar button, .stats-bar .save-status, .stats-bar .save-error { display: none !important; }
+            .staffing-layout { height: auto !important; overflow: visible !important; }
+            .lines-container { overflow: visible !important; flex-wrap: wrap; }
+            .line-column { break-inside: avoid; border: 1px solid #333; min-width: 140px; }
+            .waitlist-sidebar { break-inside: avoid; border: 1px solid #333; }
+            .position-input { border: none !important; box-shadow: none !important; padding: 2px !important; }
+            .waitlist-input { border: none !important; box-shadow: none !important; padding: 2px !important; }
+            .waitlist-controls button { display: none !important; }
+            .print-header { display: block !important; text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 8px; }
+        }
+        .print-header { display: none; }
+
+        .undo-banner {
+            position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+            background: #1f2937; color: white; padding: 12px 20px; border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center;
+            gap: 16px; z-index: 200; font-size: 13px; animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+        .undo-banner button { background: #667eea; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 12px; }
+
+        .lock-banner {
+            background: #fef3c7; border: 2px solid #f59e0b; border-radius: 6px;
+            padding: 10px 16px; margin-bottom: 12px; display: flex; justify-content: space-between;
+            align-items: center; font-size: 13px; font-weight: 600; color: #92400e;
+        }
+        .locked-overlay { pointer-events: none; opacity: 0.6; user-select: none; }
+
+        .duplicate-warning {
+            background: #fff7ed; border: 1px solid #f97316; border-radius: 6px;
+            padding: 8px 12px; margin-bottom: 8px; font-size: 12px; color: #9a3412;
+        }
+
+        .bulk-action-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; background: #1f2937; color: white;
+            padding: 12px 20px; display: flex; align-items: center; justify-content: center;
+            gap: 12px; z-index: 150; box-shadow: 0 -4px 12px rgba(0,0,0,0.2); font-size: 13px;
+        }
+        .bulk-action-bar button { padding: 6px 14px; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 12px; }
+        .bulk-checkbox { position: absolute; top: 2px; left: 2px; z-index: 5; }
+
+        .save-error {
+            color: #ef4444; font-weight: 600; display: flex; align-items: center; gap: 6px; font-size: 11px;
+        }
+        .save-error button { background: none; border: none; color: #ef4444; font-weight: bold; cursor: pointer; font-size: 14px; }
+
+        .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .analytics-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .analytics-card { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; text-align: center; }
+        .analytics-card h4 { font-size: 28px; font-weight: 700; color: #667eea; margin-bottom: 4px; }
+        .analytics-card p { font-size: 12px; color: #6b7280; }
+        .bar-chart { margin-bottom: 8px; }
+        .bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+        .bar-label { min-width: 80px; text-align: right; font-weight: 600; color: #374151; flex-shrink: 0; }
+        .bar-fill { height: 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 4px; transition: width 0.3s; min-width: 2px; color: white; font-size: 11px; font-weight: 600; display: flex; align-items: center; padding: 0 8px; }
+
+        .comparison-container { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .comparison-side { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+        .comparison-side h4 { background: #f3f4f6; padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; }
+        .comparison-line { padding: 8px 12px; border-bottom: 1px solid #f3f4f6; }
+        .comparison-name { padding: 2px 6px; border-radius: 3px; font-size: 12px; margin: 1px 0; display: block; }
+        .comparison-name.added { background: #d1fae5; color: #065f46; }
+        .comparison-name.removed { background: #fee2e2; color: #991b1b; }
+        .comparison-name.same { background: #f3f4f6; color: #374151; }
+        .comparison-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+        .comparison-stat { text-align: center; padding: 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -1030,12 +1107,17 @@
 
         // Storage utilities
         const storage = {
-            save: (key, data) => localStorage.setItem(key, JSON.stringify(data)),
-            load: (key, defaultValue = null) => {
-                const item = localStorage.getItem(key);
-                return item ? JSON.parse(item) : defaultValue;
+            save: (key, data) => {
+                try { localStorage.setItem(key, JSON.stringify(data)); }
+                catch (e) { console.error('localStorage save failed (quota?):', e); }
             },
-            remove: (key) => localStorage.removeItem(key)
+            load: (key, defaultValue = null) => {
+                try {
+                    const item = localStorage.getItem(key);
+                    return item ? JSON.parse(item) : defaultValue;
+                } catch (e) { console.error('localStorage load failed:', e); return defaultValue; }
+            },
+            remove: (key) => { try { localStorage.removeItem(key); } catch(e) {} }
         };
 
         function App() {
@@ -1049,7 +1131,11 @@
             const [saveStatus, setSaveStatus] = useState('');
             const [firebaseStatus, setFirebaseStatus] = useState(isFirebaseConfigured ? 'connected' : 'offline');
             const [isLocked, setIsLocked] = useState(false);
+            const [undoStack, setUndoStack] = useState([]);
+            const [undoMessage, setUndoMessage] = useState('');
             const saveTimeoutRef = useRef(null);
+            const savingRef = useRef(false);
+            const undoTimerRef = useRef(null);
 
             // Load core associates from Firebase and localStorage
             useEffect(() => {
@@ -1102,15 +1188,20 @@
             useEffect(() => {
                 if (lines.length === 0) return;
 
-                // Clear existing timeout
                 if (saveTimeoutRef.current) {
                     clearTimeout(saveTimeoutRef.current);
                 }
 
-                // Set new timeout for auto-save
+                // Capture current values in closure to prevent stale data
+                const capturedDate = currentDate;
+                const capturedShift = currentShift;
+                const capturedLines = lines;
+                const capturedWaitlist = waitlist;
+                const capturedLocked = isLocked;
+
                 saveTimeoutRef.current = setTimeout(() => {
-                    handleAutoSave();
-                }, 2000); // Save 2 seconds after last change
+                    handleAutoSave(capturedDate, capturedShift, capturedLines, capturedWaitlist, capturedLocked);
+                }, 2000);
 
                 return () => {
                     if (saveTimeoutRef.current) {
@@ -1119,40 +1210,43 @@
                 };
             }, [lines, waitlist, currentDate, currentShift]);
 
-            const handleAutoSave = async () => {
+            const handleAutoSave = async (date, shift, saveLines, saveWaitlist, locked) => {
+                if (savingRef.current) return;
+                savingRef.current = true;
+
                 const staffingData = {
-                    date: currentDate,
-                    shift: currentShift,
-                    lines: lines,
-                    waitlist: waitlist,
-                    locked: isLocked,
+                    date: date,
+                    shift: shift,
+                    lines: saveLines,
+                    waitlist: saveWaitlist,
+                    locked: locked,
                     lastUpdated: new Date().toISOString()
                 };
 
-                // Always save to localStorage
-                storage.save(`staffing_${currentDate}_${currentShift}`, staffingData);
-                console.log('Saved to localStorage:', `staffing_${currentDate}_${currentShift}`);
-
-                // Save to Firebase if configured
+                // Save to Firebase first if configured
                 if (isFirebaseConfigured && db) {
                     try {
-                        const docId = `${currentDate}_${currentShift}`;
+                        const docId = `${date}_${shift}`;
                         await db.ref('staffing/' + docId).set(staffingData);
-                        console.log('Saved to Firebase Realtime Database:', docId);
+                        storage.save(`staffing_${date}_${shift}`, staffingData);
                         setSaveStatus('Saved to cloud ✓');
                         setFirebaseStatus('connected');
+                        setTimeout(() => setSaveStatus(''), 3000);
                     } catch (error) {
                         console.error('Firebase save error:', error);
-                        console.error('Error details:', error.code, error.message);
                         setFirebaseStatus('disconnected');
-                        setSaveStatus('Error: ' + error.message);
+                        // Still save locally as fallback
+                        storage.save(`staffing_${date}_${shift}`, staffingData);
+                        setSaveStatus('Error: Cloud save failed - saved locally only');
+                        // Don't auto-clear errors
                     }
                 } else {
+                    storage.save(`staffing_${date}_${shift}`, staffingData);
                     setSaveStatus('Saved locally');
+                    setTimeout(() => setSaveStatus(''), 3000);
                 }
 
-                // Clear status after 3 seconds
-                setTimeout(() => setSaveStatus(''), 3000);
+                savingRef.current = false;
             };
 
             const loadStaffingData = async (date, shift) => {
@@ -1212,7 +1306,14 @@
                     // Combine core associates from all leads
                     const allCoreAssociates = [];
                     leads.forEach(lead => {
-                        const coreList = coreAssociates[lead] || [];
+                        // Try exact match first, then case-insensitive match
+                        let coreList = coreAssociates[lead];
+                        if (!coreList) {
+                            const matchKey = Object.keys(coreAssociates).find(
+                                k => k.toLowerCase() === lead.toLowerCase()
+                            );
+                            coreList = matchKey ? coreAssociates[matchKey] : [];
+                        }
                         allCoreAssociates.push(...coreList);
                     });
 
@@ -1305,6 +1406,10 @@
             };
 
             const handleToggleCutLine = (lineId) => {
+                const targetLine = lines.find(l => l.id === lineId);
+                if (targetLine && !targetLine.isCut) {
+                    pushUndo(`Line ${targetLine.letter || '?'} cut`);
+                }
                 setLines(prev => prev.map(line => {
                     if (line.id === lineId) {
                         const newCutStatus = !line.isCut;
@@ -1373,7 +1478,13 @@
 
             const handleDrop = (e, target) => {
                 e.preventDefault();
-                const source = JSON.parse(e.dataTransfer.getData('application/json'));
+                let source;
+                try {
+                    source = JSON.parse(e.dataTransfer.getData('application/json'));
+                } catch (err) {
+                    console.error('Invalid drag data:', err);
+                    return;
+                }
 
                 // Don't allow drops on cut lines
                 if (target.type === 'position') {
@@ -1447,27 +1558,61 @@
                 }
             };
 
+            const pushUndo = (msg) => {
+                setUndoStack(prev => [...prev.slice(-4), { lines: JSON.parse(JSON.stringify(lines)), waitlist: JSON.parse(JSON.stringify(waitlist)) }]);
+                setUndoMessage(msg);
+                if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+                undoTimerRef.current = setTimeout(() => setUndoMessage(''), 8000);
+            };
+
+            const handleUndo = () => {
+                if (undoStack.length === 0) return;
+                const last = undoStack[undoStack.length - 1];
+                setLines(last.lines);
+                setWaitlist(last.waitlist);
+                setUndoStack(prev => prev.slice(0, -1));
+                setUndoMessage('');
+                if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+            };
+
             const handleRemoveLine = (lineId) => {
-                if (confirm('Remove this line? This cannot be undone.')) {
-                    setLines(prev => prev.filter(line => line.id !== lineId));
+                const line = lines.find(l => l.id === lineId);
+                const desc = line ? `Line ${line.letter || '?'}` : 'Line';
+                if (confirm(`Remove ${desc}?`)) {
+                    pushUndo(`${desc} removed`);
+                    setLines(prev => prev.filter(l => l.id !== lineId));
                 }
             };
 
             const handleUpdateLine = (lineId, updates) => {
+                // Check for truncation before entering state updater
+                if (updates.needed !== undefined && !updates.positions) {
+                    const currentLine = lines.find(l => l.id === lineId);
+                    if (currentLine) {
+                        const newNeeded = parseInt(updates.needed) || 0;
+                        if (newNeeded < currentLine.positions.length) {
+                            const wouldLose = currentLine.positions.slice(newNeeded).filter(p => p.name.trim());
+                            if (wouldLose.length > 0) {
+                                const names = wouldLose.map(p => p.name).join(', ');
+                                if (!confirm(`Reducing positions will remove: ${names}\n\nContinue?`)) {
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+
                 setLines(prev => prev.map(line => {
                     if (line.id === lineId) {
                         const updatedLine = { ...line, ...updates };
 
-                        // If positions were explicitly provided (from core member sync), use them directly
                         if (updates.positions) {
                             return updatedLine;
                         }
 
-                        // If needed count changed, adjust positions array
                         if (updates.needed !== undefined && updates.needed !== line.positions.length) {
                             const newNeeded = parseInt(updates.needed) || 0;
                             if (newNeeded > line.positions.length) {
-                                // Add more positions
                                 const additionalPositions = Array(newNeeded - line.positions.length)
                                     .fill(null)
                                     .map((_, idx) => ({
@@ -1477,7 +1622,6 @@
                                     }));
                                 updatedLine.positions = [...line.positions, ...additionalPositions];
                             } else {
-                                // Remove excess positions
                                 updatedLine.positions = line.positions.slice(0, newNeeded);
                             }
                         }
@@ -1787,7 +1931,8 @@
             };
 
             const handleClearAll = () => {
-                if (confirm('Clear current shift data? This cannot be undone.')) {
+                if (confirm('Clear current shift data?')) {
+                    pushUndo('Shift data cleared');
                     setLines([]);
                     setWaitlist([]);
                 }
@@ -1814,6 +1959,9 @@
                         <div className="header-actions">
                             {lines.length > 0 && (
                                 <>
+                                    <button className="btn btn-secondary" onClick={() => window.print()}>
+                                        Print
+                                    </button>
                                     <button className="btn btn-secondary" onClick={handleExport}>
                                         Export
                                     </button>
@@ -1851,6 +1999,12 @@
                             >
                                 Core Team
                             </button>
+                            <button
+                                className={`tab ${activeTab === 'analytics' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('analytics')}
+                            >
+                                Analytics
+                            </button>
                         </div>
 
                         {activeTab === 'setup' && (
@@ -1869,8 +2023,11 @@
                                 currentDate={currentDate}
                                 currentShift={currentShift}
                                 saveStatus={saveStatus}
+                                setSaveStatus={setSaveStatus}
                                 isLocked={isLocked}
                                 coreAssociates={coreAssociates}
+                                undoMessage={undoMessage}
+                                onUndo={handleUndo}
                                 onToggleLock={handleToggleLock}
                                 onUpdatePosition={handleUpdatePosition}
                                 onUpdateWaitlistItem={handleUpdateWaitlistItem}
@@ -1884,6 +2041,8 @@
                                 onDragStart={handleDragStart}
                                 onDragOver={handleDragOver}
                                 onDrop={handleDrop}
+                                setLines={setLines}
+                                setWaitlist={setWaitlist}
                             />
                         )}
 
@@ -1896,6 +2055,10 @@
                                     setActiveTab('staffing');
                                 }}
                             />
+                        )}
+
+                        {activeTab === 'analytics' && (
+                            <AnalyticsView />
                         )}
 
                         {activeTab === 'core' && (
@@ -1922,8 +2085,11 @@
             currentDate,
             currentShift,
             saveStatus,
+            setSaveStatus,
             isLocked,
             coreAssociates,
+            undoMessage,
+            onUndo,
             onToggleLock,
             onUpdatePosition,
             onUpdateWaitlistItem,
@@ -1936,11 +2102,17 @@
             onToggleCutLine,
             onDragStart,
             onDragOver,
-            onDrop
+            onDrop,
+            setLines,
+            setWaitlist
         }) {
             const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
             const [quickAddInput, setQuickAddInput] = useState('');
             const [quickAddNames, setQuickAddNames] = useState([]);
+            const [waitlistSearch, setWaitlistSearch] = useState('');
+            const [selectMode, setSelectMode] = useState(false);
+            const [selectedPositions, setSelectedPositions] = useState([]);
+            const [selectedWaitlist, setSelectedWaitlist] = useState([]);
             const quickAddInputRef = useRef(null);
 
             useEffect(() => {
@@ -1972,6 +2144,9 @@
             };
 
             const handleCancelQuickAdd = () => {
+                if (quickAddNames.length > 0) {
+                    if (!confirm(`Discard ${quickAddNames.length} name(s)?`)) return;
+                }
                 setIsQuickAddOpen(false);
                 setQuickAddInput('');
                 setQuickAddNames([]);
@@ -1997,12 +2172,117 @@
                 sum + line.positions.filter(p => p.name.trim() && p.isNew).length, 0
             );
 
+            // Duplicate person detection (bug #5)
+            const allNames = [];
+            lines.forEach(line => {
+                if (!line.isCut) {
+                    line.positions.forEach(p => {
+                        if (p.name.trim()) allNames.push({ name: p.name.trim().toLowerCase(), location: `Line ${line.letter}` });
+                    });
+                }
+            });
+            waitlist.forEach(w => {
+                if (w.name.trim()) allNames.push({ name: w.name.trim().toLowerCase(), location: 'Waitlist' });
+            });
+            const nameCounts = {};
+            allNames.forEach(({ name, location }) => {
+                if (!nameCounts[name]) nameCounts[name] = [];
+                nameCounts[name].push(location);
+            });
+            const duplicates = Object.entries(nameCounts).filter(([_, locs]) => locs.length > 1);
+
+            // Bulk operation handlers
+            const togglePositionSelect = (lineId, positionId) => {
+                setSelectedPositions(prev => {
+                    const exists = prev.find(s => s.lineId === lineId && s.positionId === positionId);
+                    if (exists) return prev.filter(s => !(s.lineId === lineId && s.positionId === positionId));
+                    return [...prev, { lineId, positionId }];
+                });
+            };
+
+            const toggleWaitlistSelect = (id) => {
+                setSelectedWaitlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+            };
+
+            const handleBulkMoveToWaitlist = () => {
+                const toMove = [];
+                selectedPositions.forEach(({ lineId, positionId }) => {
+                    const line = lines.find(l => l.id === lineId);
+                    if (line) {
+                        const pos = line.positions.find(p => p.id === positionId);
+                        if (pos && pos.name.trim()) {
+                            toMove.push({ name: pos.name, isNew: pos.isNew });
+                        }
+                    }
+                });
+                if (toMove.length > 0) {
+                    const newWaitlistItems = toMove.map(item => ({ id: Date.now() + Math.random(), name: item.name, isNew: item.isNew }));
+                    setWaitlist(prev => [...prev, ...newWaitlistItems]);
+                    setLines(prev => prev.map(line => ({
+                        ...line,
+                        positions: line.positions.map(pos => {
+                            if (selectedPositions.find(s => s.lineId === line.id && s.positionId === pos.id)) {
+                                return { ...pos, name: '', isNew: false };
+                            }
+                            return pos;
+                        })
+                    })));
+                }
+                setSelectedPositions([]);
+                setSelectedWaitlist([]);
+            };
+
+            const handleBulkClear = () => {
+                setLines(prev => prev.map(line => ({
+                    ...line,
+                    positions: line.positions.map(pos => {
+                        if (selectedPositions.find(s => s.lineId === line.id && s.positionId === pos.id)) {
+                            return { ...pos, name: '', isNew: false };
+                        }
+                        return pos;
+                    })
+                })));
+                setWaitlist(prev => prev.map(item => {
+                    if (selectedWaitlist.includes(item.id)) {
+                        return { ...item, name: '', isNew: false };
+                    }
+                    return item;
+                }));
+                setSelectedPositions([]);
+                setSelectedWaitlist([]);
+            };
+
+            const handleDeselectAll = () => {
+                setSelectedPositions([]);
+                setSelectedWaitlist([]);
+            };
+
+            const filteredWaitlist = waitlistSearch.trim()
+                ? waitlist.filter(w => w.name.toLowerCase().includes(waitlistSearch.toLowerCase()))
+                : waitlist;
+
             return (
                 <>
+                    <div className="print-header">Crescent Staffing Planner - {currentDate} - {currentShift} Shift</div>
+
                     {!isFirebaseConfigured && (
                         <div className="firebase-config">
                             <h4>⚠️ Firebase Not Configured</h4>
                             <p>Data is being saved locally only. To enable cloud sync and remote access, please configure Firebase in the code.</p>
+                        </div>
+                    )}
+
+                    {isLocked && (
+                        <div className="lock-banner">
+                            <span>This staffing sheet is locked. Unlock to make changes.</span>
+                            <button className="btn btn-primary btn-small" onClick={onToggleLock}>Unlock</button>
+                        </div>
+                    )}
+
+                    {duplicates.length > 0 && (
+                        <div className="duplicate-warning">
+                            <strong>Duplicate names detected:</strong>{' '}
+                            {duplicates.map(([name, locs]) => `${name} (${locs.join(', ')})`).join('; ')}
                         </div>
                     )}
 
@@ -2021,33 +2301,51 @@
                             {cutLines.length > 0 && <span style={{ marginLeft: '12px', color: '#ef4444' }}>• {cutLines.length} cut</span>}
                             {waitlist.filter(w => w.name.trim()).length > 0 && <span style={{ marginLeft: '12px', color: '#f59e0b' }}>• {waitlist.filter(w => w.name.trim()).length} waiting</span>}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                                className={`btn ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={() => { setSelectMode(!selectMode); handleDeselectAll(); }}
+                                disabled={isLocked}
+                                style={{ fontSize: '12px', padding: '6px 12px', opacity: isLocked ? 0.5 : 1 }}
+                            >
+                                {selectMode ? 'Exit Select' : 'Select'}
+                            </button>
                             <button
                                 className={`btn ${isLocked ? 'btn-danger' : 'btn-secondary'}`}
                                 onClick={onToggleLock}
                                 style={{ fontSize: '12px', padding: '6px 12px' }}
                             >
-                                {isLocked ? '🔓 Unlock' : '🔒 Lock'}
+                                {isLocked ? 'Unlock' : 'Lock'}
                             </button>
                             {saveStatus && (
-                                <div className="save-status">{saveStatus}</div>
+                                saveStatus.includes('Error') ? (
+                                    <div className="save-error">
+                                        {saveStatus}
+                                        <button onClick={() => setSaveStatus('')}>×</button>
+                                    </div>
+                                ) : (
+                                    <div className="save-status">{saveStatus}</div>
+                                )
                             )}
                         </div>
                     </div>
 
                     <div className="staffing-layout">
-                        <div className="lines-container">
+                        <div className={`lines-container ${isLocked ? 'locked-overlay' : ''}`}>
                             {lines.map(line => (
                                 <LineColumn
                                     key={line.id}
                                     line={line}
                                     isLocked={isLocked}
                                     coreAssociates={coreAssociates}
+                                    selectMode={selectMode}
+                                    selectedPositions={selectedPositions}
+                                    onTogglePositionSelect={togglePositionSelect}
                                     onUpdatePosition={onUpdatePosition}
                                     onUpdateLine={onUpdateLine}
                                     onRemoveLine={onRemoveLine}
                                     onToggleCutLine={onToggleCutLine}
-                                    onDragStart={onDragStart}
+                                    onDragStart={selectMode ? (e) => e.preventDefault() : onDragStart}
                                     onDragOver={onDragOver}
                                     onDrop={onDrop}
                                 />
@@ -2061,11 +2359,11 @@
                         </div>
 
                         <div
-                            className="waitlist-sidebar"
-                            onDragOver={isLocked ? null : onDragOver}
-                            onDrop={(e) => isLocked ? e.preventDefault() : onDrop(e, { type: 'waitlist' })}
+                            className={`waitlist-sidebar ${isLocked ? 'locked-overlay' : ''}`}
+                            onDragOver={isLocked || selectMode ? null : onDragOver}
+                            onDrop={(e) => isLocked || selectMode ? e.preventDefault() : onDrop(e, { type: 'waitlist' })}
                         >
-                            <div className="waitlist-header">
+                            <div className="waitlist-header" style={isLocked ? {pointerEvents: 'auto'} : {}}>
                                 WAITLIST ({waitlist.filter(w => w.name.trim()).length})
                                 <div style={{ display: 'flex', gap: '4px', marginLeft: '8px' }}>
                                     <button
@@ -2086,15 +2384,34 @@
                                     </button>
                                 </div>
                             </div>
+                            <div style={{ padding: '4px 6px' }}>
+                                <input
+                                    type="text"
+                                    className="waitlist-input"
+                                    placeholder="Search waitlist..."
+                                    value={waitlistSearch}
+                                    onChange={(e) => setWaitlistSearch(e.target.value)}
+                                    style={{ fontSize: '11px', padding: '4px 6px' }}
+                                />
+                            </div>
                             <div className="waitlist-items">
-                                {waitlist.map((item, idx) => (
+                                {filteredWaitlist.map((item, idx) => (
                                     <div
                                         key={item.id}
                                         className="waitlist-item"
-                                        draggable={!isLocked && item.name.trim() !== ''}
-                                        onDragStart={(e) => isLocked ? e.preventDefault() : onDragStart(e, { type: 'waitlist', id: item.id })}
-                                        style={{ cursor: isLocked ? 'not-allowed' : (item.name.trim() ? 'grab' : 'default'), opacity: isLocked ? 0.7 : 1 }}
+                                        draggable={!isLocked && !selectMode && item.name.trim() !== ''}
+                                        onDragStart={(e) => (isLocked || selectMode) ? e.preventDefault() : onDragStart(e, { type: 'waitlist', id: item.id })}
+                                        style={{ cursor: isLocked ? 'not-allowed' : selectMode ? 'pointer' : (item.name.trim() ? 'grab' : 'default'), opacity: isLocked ? 0.7 : 1 }}
+                                        onClick={selectMode && item.name.trim() ? () => toggleWaitlistSelect(item.id) : undefined}
                                     >
+                                        {selectMode && item.name.trim() && (
+                                            <input type="checkbox"
+                                                checked={selectedWaitlist.includes(item.id)}
+                                                onChange={() => toggleWaitlistSelect(item.id)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                style={{ width: '14px', height: '14px', flexShrink: 0 }}
+                                            />
+                                        )}
                                         <div style={{ fontSize: '10px', color: '#6b7280', fontWeight: '600' }}>
                                             #{idx + 1}
                                         </div>
@@ -2126,14 +2443,41 @@
                                         </div>
                                     </div>
                                 ))}
-                                {waitlist.length === 0 && (
+                                {filteredWaitlist.length === 0 && (
                                     <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '12px' }}>
-                                        No one waiting
+                                        {waitlistSearch ? 'No matches' : 'No one waiting'}
                                     </div>
                                 )}
                             </div>
                         </div>
                     </div>
+
+                    {/* Bulk Action Bar */}
+                    {selectMode && (selectedPositions.length > 0 || selectedWaitlist.length > 0) && (
+                        <div className="bulk-action-bar">
+                            <span>{selectedPositions.length + selectedWaitlist.length} selected</span>
+                            {selectedPositions.length > 0 && (
+                                <button style={{ background: '#f59e0b', color: 'white' }} onClick={handleBulkMoveToWaitlist}>
+                                    Move to Waitlist
+                                </button>
+                            )}
+                            <button style={{ background: '#ef4444', color: 'white' }} onClick={handleBulkClear}>
+                                Clear Selected
+                            </button>
+                            <button style={{ background: '#6b7280', color: 'white' }} onClick={handleDeselectAll}>
+                                Deselect All
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Undo Banner */}
+                    {undoMessage && (
+                        <div className="undo-banner">
+                            <span>{undoMessage}</span>
+                            <button onClick={onUndo}>Undo</button>
+                            <button onClick={() => setSaveStatus('')} style={{ background: 'transparent', padding: '4px 8px', fontSize: '16px' }}>×</button>
+                        </div>
+                    )}
 
                     {/* Quick Add Modal */}
                     {isQuickAddOpen && (
@@ -2209,7 +2553,7 @@
             );
         }
 
-        function LineColumn({ line, isLocked, coreAssociates, onUpdatePosition, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop }) {
+        function LineColumn({ line, isLocked, coreAssociates, selectMode, selectedPositions, onTogglePositionSelect, onUpdatePosition, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop }) {
             const [isEditing, setIsEditing] = useState(false);
             const [editLetter, setEditLetter] = useState(line.letter);
             const [editLeads, setEditLeads] = useState((line.leads || []).join(', '));
@@ -2229,8 +2573,13 @@
 
                 // Collect core members to add from new leads
                 const coreToAdd = [];
+                const ca = coreAssociates || {};
                 addedLeads.forEach(lead => {
-                    const members = (coreAssociates || {})[lead] || [];
+                    let members = ca[lead];
+                    if (!members) {
+                        const matchKey = Object.keys(ca).find(k => k.toLowerCase() === lead.toLowerCase());
+                        members = matchKey ? ca[matchKey] : [];
+                    }
                     members.forEach(m => {
                         // Don't add if already on this line
                         if (!line.positions.some(p => p.name.trim().toLowerCase() === m.name.trim().toLowerCase())) {
@@ -2242,7 +2591,11 @@
                 // Collect core member names from removed leads
                 const coreToRemove = [];
                 removedLeads.forEach(lead => {
-                    const members = (coreAssociates || {})[lead] || [];
+                    let members = ca[lead];
+                    if (!members) {
+                        const matchKey = Object.keys(ca).find(k => k.toLowerCase() === lead.toLowerCase());
+                        members = matchKey ? ca[matchKey] : [];
+                    }
                     members.forEach(m => {
                         // Only remove if they're actually on this line
                         if (line.positions.some(p => p.name.trim().toLowerCase() === m.name.trim().toLowerCase())) {
@@ -2326,6 +2679,14 @@
                         }));
                     updatedPositions = [...updatedPositions, ...additionalPositions];
                 } else if (newNeeded < updatedPositions.length) {
+                    const wouldLose = updatedPositions.slice(newNeeded).filter(p => p.name.trim());
+                    if (wouldLose.length > 0) {
+                        const names = wouldLose.map(p => p.name).join(', ');
+                        if (!confirm(`Reducing positions will remove: ${names}\n\nContinue?`)) {
+                            setIsEditing(false);
+                            return;
+                        }
+                    }
                     updatedPositions = updatedPositions.slice(0, newNeeded);
                 }
 
@@ -2433,12 +2794,21 @@
                             <div
                                 key={position.id}
                                 className={`position-slot ${position.name.trim() ? 'filled' : ''} ${position.isNew ? 'new-associate' : ''}`}
-                                draggable={!isLocked && position.name.trim() !== '' && !line.isCut}
-                                onDragStart={(e) => isLocked ? e.preventDefault() : onDragStart(e, { type: 'position', lineId: line.id, positionId: position.id })}
-                                onDragOver={onDragOver}
-                                onDrop={(e) => isLocked ? e.preventDefault() : onDrop(e, { type: 'position', lineId: line.id, positionId: position.id })}
-                                style={{ cursor: isLocked ? 'not-allowed' : (position.name.trim() && !line.isCut ? 'grab' : 'default'), opacity: isLocked ? 0.7 : 1 }}
+                                draggable={!isLocked && !selectMode && position.name.trim() !== '' && !line.isCut}
+                                onDragStart={(e) => (isLocked || selectMode) ? e.preventDefault() : onDragStart(e, { type: 'position', lineId: line.id, positionId: position.id })}
+                                onDragOver={selectMode ? null : onDragOver}
+                                onDrop={(e) => (isLocked || selectMode) ? e.preventDefault() : onDrop(e, { type: 'position', lineId: line.id, positionId: position.id })}
+                                style={{ cursor: isLocked ? 'not-allowed' : selectMode ? 'pointer' : (position.name.trim() && !line.isCut ? 'grab' : 'default'), position: 'relative' }}
+                                onClick={selectMode && position.name.trim() ? () => onTogglePositionSelect(line.id, position.id) : undefined}
                             >
+                                {selectMode && position.name.trim() && (
+                                    <input type="checkbox" className="bulk-checkbox"
+                                        checked={!!(selectedPositions || []).find(s => s.lineId === line.id && s.positionId === position.id)}
+                                        onChange={() => onTogglePositionSelect(line.id, position.id)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        style={{ width: '14px', height: '14px' }}
+                                    />
+                                )}
                                 <div className="position-number">{index + 1}</div>
                                 <input
                                     type="text"
@@ -2466,10 +2836,49 @@
         function SetupView({ onSetupShift, coreAssociates, initialDate, initialShift }) {
             const [date, setDate] = useState(initialDate);
             const [shift, setShift] = useState(initialShift);
-            const [lines, setLines] = useState([{ letter: '', lead: '', needed: '' }]);
+            const [lines, setLines] = useState([{ letter: '', leads: [], leadInput: '', needed: '' }]);
+            const [showClone, setShowClone] = useState(false);
+            const [cloneOptions, setCloneOptions] = useState([]);
+
+            const loadCloneOptions = async () => {
+                const options = [];
+                if (isFirebaseConfigured && db) {
+                    try {
+                        const snapshot = await db.ref('staffing').once('value');
+                        if (snapshot.exists()) {
+                            Object.entries(snapshot.val()).forEach(([id, data]) => {
+                                options.push({ id, date: data.date, shift: data.shift, lines: data.lines || [] });
+                            });
+                        }
+                    } catch (e) { console.error('Error loading clone options:', e); }
+                }
+                const localKeys = Object.keys(localStorage).filter(k => k.startsWith('staffing_') && !k.includes('coreAssociates'));
+                localKeys.forEach(key => {
+                    const data = storage.load(key);
+                    if (data && !options.find(o => o.id === `${data.date}_${data.shift}`)) {
+                        options.push({ id: `${data.date}_${data.shift}`, date: data.date, shift: data.shift, lines: data.lines || [] });
+                    }
+                });
+                options.sort((a, b) => b.date.localeCompare(a.date));
+                setCloneOptions(options);
+                setShowClone(true);
+            };
+
+            const handleClone = (option) => {
+                const clonedLines = option.lines.filter(l => !l.isCut).map(l => ({
+                    letter: l.letter || '',
+                    leads: l.leads || [],
+                    leadInput: '',
+                    needed: String(l.needed || '')
+                }));
+                if (clonedLines.length > 0) {
+                    setLines(clonedLines);
+                }
+                setShowClone(false);
+            };
 
             const handleAddLine = () => {
-                setLines([...lines, { letter: '', lead: '', needed: '' }]);
+                setLines([...lines, { letter: '', leads: [], leadInput: '', needed: '' }]);
             };
 
             const handleRemoveLine = (index) => {
@@ -2520,9 +2929,9 @@
                     return; // Don't create a new sheet
                 }
 
-                const validLines = lines.filter(l => l.letter && l.lead && l.needed).map(l => ({
+                const validLines = lines.filter(l => l.letter && l.leads.length > 0 && l.needed).map(l => ({
                     ...l,
-                    leads: l.lead.split(',').map(lead => lead.trim()).filter(lead => lead)
+                    leads: l.leads
                 }));
                 if (validLines.length > 0) {
                     onSetupShift({ date, shift, lines: validLines });
@@ -2559,7 +2968,29 @@
                     </div>
 
                     <div className="form-section">
-                        <h3>Configure Production Lines</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <h3 style={{ margin: 0 }}>Configure Production Lines</h3>
+                            <button type="button" className="btn btn-secondary btn-small" onClick={loadCloneOptions}
+                                style={{ background: '#667eea', color: 'white', border: 'none' }}>
+                                Clone Previous Shift
+                            </button>
+                        </div>
+                        {showClone && (
+                            <div style={{ background: '#f0f2f5', border: '1px solid #d1d5db', borderRadius: '6px', padding: '12px', marginBottom: '12px', maxHeight: '200px', overflowY: 'auto' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <strong style={{ fontSize: '12px' }}>Select a shift to clone:</strong>
+                                    <button type="button" className="btn btn-secondary btn-small" onClick={() => setShowClone(false)}>×</button>
+                                </div>
+                                {cloneOptions.length === 0 ? (
+                                    <p style={{ fontSize: '12px', color: '#6b7280' }}>No previous shifts found.</p>
+                                ) : cloneOptions.map(opt => (
+                                    <div key={opt.id} onClick={() => handleClone(opt)}
+                                        style={{ padding: '8px', background: 'white', borderRadius: '4px', marginBottom: '4px', cursor: 'pointer', fontSize: '12px', border: '1px solid #e5e7eb' }}>
+                                        <strong>{opt.date}</strong> - {opt.shift} Shift ({opt.lines.filter(l => !l.isCut).length} lines)
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                         {lines.map((line, index) => (
                             <div key={index} className="form-grid" style={{ marginBottom: '12px', padding: '12px', background: 'white', borderRadius: '6px' }}>
                                 <div className="form-group">
@@ -2574,17 +3005,60 @@
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label>Line Lead(s) * <span style={{ fontSize: '10px', fontWeight: 'normal', opacity: '0.7' }}>(comma-separated for multiple)</span></label>
-                                    <input
-                                        type="text"
-                                        list="leads"
-                                        value={line.lead}
-                                        onChange={(e) => handleLineChange(index, 'lead', e.target.value)}
-                                        placeholder="John Doe, Jane Smith"
-                                        required
-                                    />
-                                    <datalist id="leads">
-                                        {allLeads.map(lead => (
+                                    <label>Line Lead(s) *</label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: line.leads.length > 0 ? '6px' : '0' }}>
+                                        {line.leads.map((lead, li) => (
+                                            <span key={li} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#667eea', color: 'white', padding: '3px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600' }}>
+                                                {lead}
+                                                <button type="button" onClick={() => {
+                                                    const newLines = [...lines];
+                                                    newLines[index] = { ...newLines[index], leads: newLines[index].leads.filter((_, i) => i !== li) };
+                                                    setLines(newLines);
+                                                }} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '14px', lineHeight: '1', padding: '0 2px' }}>×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                        <input
+                                            type="text"
+                                            list={`leads-${index}`}
+                                            value={line.leadInput || ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                // Auto-add if user selected from datalist (exact match to a known lead)
+                                                if (allLeads.includes(val) && !line.leads.includes(val)) {
+                                                    const newLines = [...lines];
+                                                    newLines[index] = { ...newLines[index], leads: [...newLines[index].leads, val], leadInput: '' };
+                                                    setLines(newLines);
+                                                } else {
+                                                    handleLineChange(index, 'leadInput', val);
+                                                }
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    const val = (line.leadInput || '').trim();
+                                                    if (val && !line.leads.includes(val)) {
+                                                        const newLines = [...lines];
+                                                        newLines[index] = { ...newLines[index], leads: [...newLines[index].leads, val], leadInput: '' };
+                                                        setLines(newLines);
+                                                    }
+                                                }
+                                            }}
+                                            placeholder={line.leads.length === 0 ? 'Type or select a lead name...' : 'Add another lead...'}
+                                            style={{ flex: 1 }}
+                                        />
+                                        <button type="button" className="btn btn-success btn-small" onClick={() => {
+                                            const val = (line.leadInput || '').trim();
+                                            if (val && !line.leads.includes(val)) {
+                                                const newLines = [...lines];
+                                                newLines[index] = { ...newLines[index], leads: [...newLines[index].leads, val], leadInput: '' };
+                                                setLines(newLines);
+                                            }
+                                        }}>Add</button>
+                                    </div>
+                                    <datalist id={`leads-${index}`}>
+                                        {allLeads.filter(l => !line.leads.includes(l)).map(lead => (
                                             <option key={lead} value={lead} />
                                         ))}
                                     </datalist>
@@ -2631,6 +3105,9 @@
             const [loading, setLoading] = useState(false);
             const [searchDate, setSearchDate] = useState('');
             const [collapsedMonths, setCollapsedMonths] = useState({});
+            const [showComparison, setShowComparison] = useState(false);
+            const [compareIdA, setCompareIdA] = useState('');
+            const [compareIdB, setCompareIdB] = useState('');
 
             useEffect(() => {
                 loadReports();
@@ -2799,8 +3276,99 @@
                             <div style={{ fontSize: '12px', color: '#6b7280' }}>
                                 {filteredReports.length} report{filteredReports.length !== 1 ? 's' : ''} found
                             </div>
+                            {reports.length >= 2 && (
+                                <button
+                                    className={`btn ${showComparison ? 'btn-primary' : 'btn-secondary'}`}
+                                    onClick={() => setShowComparison(!showComparison)}
+                                    style={{ fontSize: '12px', padding: '6px 14px', marginLeft: 'auto' }}
+                                >
+                                    {showComparison ? 'Hide Compare' : 'Compare'}
+                                </button>
+                            )}
                         </div>
                     </div>
+
+                    {showComparison && (
+                        <div style={{ padding: '16px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', marginBottom: '16px' }}>
+                            <h4 style={{ fontSize: '14px', marginBottom: '12px' }}>Shift Comparison</h4>
+                            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                                <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '200px' }}>
+                                    <label style={{ fontSize: '12px', fontWeight: '600' }}>Shift A</label>
+                                    <select value={compareIdA} onChange={(e) => setCompareIdA(e.target.value)} style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '12px', width: '100%' }}>
+                                        <option value="">-- Select --</option>
+                                        {reports.map(r => (
+                                            <option key={r.id} value={r.id}>{r.date} - {r.shift}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '200px' }}>
+                                    <label style={{ fontSize: '12px', fontWeight: '600' }}>Shift B</label>
+                                    <select value={compareIdB} onChange={(e) => setCompareIdB(e.target.value)} style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '12px', width: '100%' }}>
+                                        <option value="">-- Select --</option>
+                                        {reports.map(r => (
+                                            <option key={r.id} value={r.id}>{r.date} - {r.shift}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            {compareIdA && compareIdB && (() => {
+                                const dataA = reports.find(r => r.id === compareIdA);
+                                const dataB = reports.find(r => r.id === compareIdB);
+                                if (!dataA || !dataB) return null;
+
+                                const getNamesSet = (data) => {
+                                    const names = new Set();
+                                    (data.lines || []).forEach(l => l.positions.forEach(p => { if (p.name && p.name.trim()) names.add(p.name.trim()); }));
+                                    (data.waitlist || []).forEach(w => { if (w.name && w.name.trim()) names.add(w.name.trim()); });
+                                    return names;
+                                };
+
+                                const namesA = getNamesSet(dataA);
+                                const namesB = getNamesSet(dataB);
+                                const onlyA = [...namesA].filter(n => !namesB.has(n));
+                                const onlyB = [...namesB].filter(n => !namesA.has(n));
+                                const both = [...namesA].filter(n => namesB.has(n));
+
+                                return (
+                                    <div>
+                                        <div className="comparison-stats">
+                                            <div className="comparison-stat" style={{ background: '#fee2e2', color: '#991b1b' }}>
+                                                {onlyA.length} removed
+                                            </div>
+                                            <div className="comparison-stat" style={{ background: '#d1fae5', color: '#065f46' }}>
+                                                {onlyB.length} added
+                                            </div>
+                                            <div className="comparison-stat" style={{ background: '#f3f4f6', color: '#374151' }}>
+                                                {both.length} same
+                                            </div>
+                                        </div>
+                                        <div className="comparison-container">
+                                            <div className="comparison-side">
+                                                <h4>{dataA.date} - {dataA.shift} ({namesA.size} people)</h4>
+                                                <div style={{ padding: '8px' }}>
+                                                    {[...namesA].sort().map(name => (
+                                                        <div key={name} className={`comparison-name ${namesB.has(name) ? 'same' : 'removed'}`}>
+                                                            {name} {!namesB.has(name) && '(not in B)'}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="comparison-side">
+                                                <h4>{dataB.date} - {dataB.shift} ({namesB.size} people)</h4>
+                                                <div style={{ padding: '8px' }}>
+                                                    {[...namesB].sort().map(name => (
+                                                        <div key={name} className={`comparison-name ${namesA.has(name) ? 'same' : 'added'}`}>
+                                                            {name} {!namesA.has(name) && '(not in A)'}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    )}
 
                     {loading ? (
                         <div className="empty-state">
@@ -3158,7 +3726,7 @@
 
                                 {(selectedLead || newLead) && (
                                     <div style={{ marginTop: '20px' }}>
-                                        {isEditingLead && selectedLead ? (
+                                        {(isEditingLead && selectedLead) ? (
                                             <div style={{ background: '#f0f2f5', border: '1px solid #d1d5db', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
                                                 <h4 style={{ marginBottom: '12px', fontSize: '14px' }}>Edit Line Lead</h4>
                                                 <div className="form-grid">
@@ -3188,34 +3756,30 @@
                                                 </div>
                                             </div>
                                         ) : (
-                                            <>
-                                                <div className="lead-header">
-                                                    <h4 className="lead-title">Core Associates for {selectedLead || newLead}</h4>
+                                            <div className="lead-header">
+                                                <h4 className="lead-title">Core Associates for {selectedLead || newLead}</h4>
+                                                {selectedLead && (
                                                     <div style={{ display: 'flex', gap: '4px' }}>
-                                                        {selectedLead && (
-                                                            <button
-                                                                className="btn btn-secondary btn-small"
-                                                                onClick={handleStartEditLead}
-                                                            >
-                                                                Edit Lead
-                                                            </button>
-                                                        )}
-                                                        {selectedLead && (
-                                                            <button
-                                                                className="btn btn-danger btn-small"
-                                                                onClick={() => onDeleteLineLead(selectedLead)}
-                                                            >
-                                                                Delete Lead
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                {selectedLead && (lineLeadNotes || {})[selectedLead] && (
-                                                    <div style={{ background: '#fef9c3', border: '1px solid #fbbf24', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', fontSize: '12px', color: '#78350f' }}>
-                                                        <strong>Notes:</strong> {(lineLeadNotes || {})[selectedLead]}
+                                                        <button
+                                                            className="btn btn-primary btn-small"
+                                                            onClick={handleStartEditLead}
+                                                        >
+                                                            Edit Lead
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-danger btn-small"
+                                                            onClick={() => onDeleteLineLead(selectedLead)}
+                                                        >
+                                                            Delete Lead
+                                                        </button>
                                                     </div>
                                                 )}
-                                            </>
+                                            </div>
+                                        )}
+                                        {!isEditingLead && selectedLead && (lineLeadNotes || {})[selectedLead] && (
+                                            <div style={{ background: '#fef9c3', border: '1px solid #fbbf24', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', fontSize: '12px', color: '#78350f' }}>
+                                                <strong>Notes:</strong> {(lineLeadNotes || {})[selectedLead]}
+                                            </div>
                                         )}
 
                                         <form onSubmit={handleAddAssociate}>
@@ -3362,6 +3926,11 @@
                                                         Delete Lead
                                                     </button>
                                                 </div>
+                                                {(lineLeadNotes || {})[lead] && (
+                                                    <div style={{ background: '#fef9c3', border: '1px solid #fbbf24', borderRadius: '6px', padding: '8px 12px', marginBottom: '12px', fontSize: '12px', color: '#78350f' }}>
+                                                        <strong>Notes:</strong> {(lineLeadNotes || {})[lead]}
+                                                    </div>
+                                                )}
                                                 <div className="core-associates-list">
                                                     {leadAssociates.map((associate, idx) => (
                                                         <div key={idx} className="core-associate-item">
@@ -3413,6 +3982,356 @@
                              firebaseStatus === 'disconnected' ? 'Cloud Disconnected' :
                              'Offline Mode'}
                         </span>
+                    </div>
+                </div>
+            );
+        }
+
+        function ComparisonView({ reports, onClose }) {
+            const [shiftA, setShiftA] = useState('');
+            const [shiftB, setShiftB] = useState('');
+
+            const reportA = reports.find(r => r.id === shiftA);
+            const reportB = reports.find(r => r.id === shiftB);
+
+            const getNamesFromReport = (report) => {
+                if (!report) return new Set();
+                const names = new Set();
+                (report.lines || []).forEach(l => {
+                    if (!l.isCut) {
+                        l.positions.forEach(p => {
+                            if (p.name && p.name.trim()) names.add(p.name.trim().toLowerCase());
+                        });
+                    }
+                });
+                return names;
+            };
+
+            const namesA = getNamesFromReport(reportA);
+            const namesB = getNamesFromReport(reportB);
+            const allNames = new Set([...namesA, ...namesB]);
+            const added = [...allNames].filter(n => !namesA.has(n) && namesB.has(n));
+            const removed = [...allNames].filter(n => namesA.has(n) && !namesB.has(n));
+            const same = [...allNames].filter(n => namesA.has(n) && namesB.has(n));
+
+            return (
+                <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h3>Compare Shifts</h3>
+                        <button className="btn btn-secondary btn-small" onClick={onClose}>Back to Reports</button>
+                    </div>
+
+                    <div className="form-grid" style={{ marginBottom: '16px' }}>
+                        <div className="form-group">
+                            <label>Shift A (Before)</label>
+                            <select value={shiftA} onChange={(e) => setShiftA(e.target.value)}>
+                                <option value="">-- Select --</option>
+                                {reports.map(r => (
+                                    <option key={r.id} value={r.id}>{r.date} - {r.shift}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Shift B (After)</label>
+                            <select value={shiftB} onChange={(e) => setShiftB(e.target.value)}>
+                                <option value="">-- Select --</option>
+                                {reports.map(r => (
+                                    <option key={r.id} value={r.id}>{r.date} - {r.shift}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {reportA && reportB && (
+                        <>
+                            <div className="comparison-stats">
+                                <div className="comparison-stat" style={{ background: '#d1fae5', color: '#065f46' }}>
+                                    +{added.length} Added
+                                </div>
+                                <div className="comparison-stat" style={{ background: '#fee2e2', color: '#991b1b' }}>
+                                    -{removed.length} Removed
+                                </div>
+                                <div className="comparison-stat" style={{ background: '#f3f4f6', color: '#374151' }}>
+                                    {same.length} Same
+                                </div>
+                            </div>
+
+                            <div className="comparison-container">
+                                <div className="comparison-side">
+                                    <h4>{reportA.date} - {reportA.shift} Shift</h4>
+                                    {(reportA.lines || []).filter(l => !l.isCut).map((line, i) => (
+                                        <div key={i} className="comparison-line">
+                                            <strong style={{ fontSize: '12px' }}>Line {line.letter}</strong>
+                                            {line.positions.filter(p => p.name && p.name.trim()).map((p, j) => {
+                                                const inB = namesB.has(p.name.trim().toLowerCase());
+                                                return <span key={j} className={`comparison-name ${inB ? 'same' : 'removed'}`}>{p.name}</span>;
+                                            })}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="comparison-side">
+                                    <h4>{reportB.date} - {reportB.shift} Shift</h4>
+                                    {(reportB.lines || []).filter(l => !l.isCut).map((line, i) => (
+                                        <div key={i} className="comparison-line">
+                                            <strong style={{ fontSize: '12px' }}>Line {line.letter}</strong>
+                                            {line.positions.filter(p => p.name && p.name.trim()).map((p, j) => {
+                                                const inA = namesA.has(p.name.trim().toLowerCase());
+                                                return <span key={j} className={`comparison-name ${inA ? 'same' : 'added'}`}>{p.name}</span>;
+                                            })}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    {(!reportA || !reportB) && (
+                        <div className="empty-state">
+                            <p>Select two shifts above to compare them side by side.</p>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function AnalyticsView() {
+            const [reports, setReports] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                loadAllReports();
+            }, []);
+
+            const loadAllReports = async () => {
+                setLoading(true);
+                const reportsList = [];
+                const seenIds = new Set();
+
+                if (isFirebaseConfigured && db) {
+                    try {
+                        const snapshot = await db.ref('staffing').once('value');
+                        if (snapshot.exists()) {
+                            const data = snapshot.val();
+                            Object.keys(data).forEach(docId => {
+                                reportsList.push({ id: docId, ...data[docId] });
+                                seenIds.add(docId);
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error loading analytics data:', error);
+                    }
+                }
+
+                Object.keys(localStorage)
+                    .filter(key => key.startsWith('staffing_') && !key.includes('coreAssociates'))
+                    .forEach(key => {
+                        const data = storage.load(key);
+                        if (data && data.date) {
+                            const id = data.date + '_' + data.shift;
+                            if (!seenIds.has(id)) {
+                                reportsList.push({ id: id, ...data });
+                                seenIds.add(id);
+                            }
+                        }
+                    });
+
+                reportsList.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+                setReports(reportsList);
+                setLoading(false);
+            };
+
+            if (loading) {
+                return (
+                    <div className="empty-state">
+                        <p>Loading analytics...</p>
+                    </div>
+                );
+            }
+
+            if (reports.length === 0) {
+                return (
+                    <div className="empty-state">
+                        <h3>No Data Available</h3>
+                        <p>Analytics will appear once you have saved staffing sheets.</p>
+                    </div>
+                );
+            }
+
+            // Calculate summary stats
+            const totalShifts = reports.length;
+
+            const fillRates = reports.map(r => {
+                const lines = (r.lines || []).filter(l => !l.isCut);
+                const total = lines.reduce((s, l) => s + (l.needed || l.positions.length), 0);
+                const filled = lines.reduce((s, l) => s + l.positions.filter(p => p.name && p.name.trim()).length, 0);
+                return total > 0 ? (filled / total) * 100 : 0;
+            });
+            const avgFillRate = fillRates.length > 0 ? (fillRates.reduce((a, b) => a + b, 0) / fillRates.length) : 0;
+
+            // Most common line letters
+            const letterCounts = {};
+            reports.forEach(r => {
+                (r.lines || []).forEach(l => {
+                    const letter = l.letter || '?';
+                    letterCounts[letter] = (letterCounts[letter] || 0) + 1;
+                });
+            });
+            const topLetters = Object.entries(letterCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 3)
+                .map(([letter]) => letter)
+                .join(', ');
+
+            // Total unique associates
+            const uniqueNames = new Set();
+            reports.forEach(r => {
+                (r.lines || []).forEach(l => l.positions.forEach(p => { if (p.name && p.name.trim()) uniqueNames.add(p.name.trim()); }));
+                (r.waitlist || []).forEach(w => { if (w.name && w.name.trim()) uniqueNames.add(w.name.trim()); });
+            });
+
+            // Fill rate by week
+            const getWeekKey = (dateStr) => {
+                const d = new Date(dateStr + 'T00:00:00');
+                const yearStart = new Date(d.getFullYear(), 0, 1);
+                const weekNum = Math.ceil(((d - yearStart) / 86400000 + yearStart.getDay() + 1) / 7);
+                return d.getFullYear() + '-W' + String(weekNum).padStart(2, '0');
+            };
+
+            const weeklyRates = {};
+            reports.forEach((r, idx) => {
+                const week = getWeekKey(r.date || '2000-01-01');
+                if (!weeklyRates[week]) weeklyRates[week] = [];
+                weeklyRates[week].push(fillRates[idx]);
+            });
+
+            const weeklyAvg = Object.entries(weeklyRates)
+                .map(([week, rates]) => ({
+                    week,
+                    avg: rates.reduce((a, b) => a + b, 0) / rates.length
+                }))
+                .sort((a, b) => a.week.localeCompare(b.week));
+
+            const maxWeeklyRate = Math.max(...weeklyAvg.map(w => w.avg), 1);
+
+            // Line frequency
+            const sortedLetters = Object.entries(letterCounts).sort((a, b) => b[1] - a[1]);
+            const maxLetterCount = sortedLetters.length > 0 ? sortedLetters[0][1] : 1;
+
+            // Associate frequency
+            const assocFreq = {};
+            reports.forEach(r => {
+                (r.lines || []).forEach(l => {
+                    l.positions.forEach(p => {
+                        if (p.name && p.name.trim()) {
+                            const name = p.name.trim();
+                            if (!assocFreq[name]) assocFreq[name] = { count: 0, lastDate: '' };
+                            assocFreq[name].count++;
+                            if ((r.date || '') > assocFreq[name].lastDate) assocFreq[name].lastDate = r.date || '';
+                        }
+                    });
+                });
+                (r.waitlist || []).forEach(w => {
+                    if (w.name && w.name.trim()) {
+                        const name = w.name.trim();
+                        if (!assocFreq[name]) assocFreq[name] = { count: 0, lastDate: '' };
+                        assocFreq[name].count++;
+                        if ((r.date || '') > assocFreq[name].lastDate) assocFreq[name].lastDate = r.date || '';
+                    }
+                });
+            });
+            const sortedAssocs = Object.entries(assocFreq)
+                .sort((a, b) => b[1].count - a[1].count);
+
+            return (
+                <div>
+                    <h3 style={{ marginBottom: '16px' }}>Historical Analytics</h3>
+
+                    <div className="analytics-cards">
+                        <div className="analytics-card">
+                            <h4>{totalShifts}</h4>
+                            <p>Total Shifts Tracked</p>
+                        </div>
+                        <div className="analytics-card">
+                            <h4>{avgFillRate.toFixed(1)}%</h4>
+                            <p>Average Fill Rate</p>
+                        </div>
+                        <div className="analytics-card">
+                            <h4>{topLetters || 'N/A'}</h4>
+                            <p>Most Common Lines</p>
+                        </div>
+                        <div className="analytics-card">
+                            <h4>{uniqueNames.size}</h4>
+                            <p>Total Unique Associates</p>
+                        </div>
+                    </div>
+
+                    <div style={{ marginBottom: '24px' }}>
+                        <h4 style={{ fontSize: '14px', marginBottom: '12px', color: '#111827' }}>Fill Rate by Week</h4>
+                        {weeklyAvg.length === 0 ? (
+                            <p style={{ color: '#6b7280', fontSize: '12px' }}>No weekly data available.</p>
+                        ) : (
+                            <div className="bar-chart">
+                                {weeklyAvg.map(w => (
+                                    <div key={w.week} className="bar-row">
+                                        <div className="bar-label">{w.week}</div>
+                                        <div className="bar-fill" style={{ width: Math.max((w.avg / maxWeeklyRate) * 100, 5) + '%' }}>
+                                            {w.avg.toFixed(1)}%
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{ marginBottom: '24px' }}>
+                        <h4 style={{ fontSize: '14px', marginBottom: '12px', color: '#111827' }}>Line Frequency</h4>
+                        {sortedLetters.length === 0 ? (
+                            <p style={{ color: '#6b7280', fontSize: '12px' }}>No line data available.</p>
+                        ) : (
+                            <div className="bar-chart">
+                                {sortedLetters.map(([letter, count]) => (
+                                    <div key={letter} className="bar-row">
+                                        <div className="bar-label">Line {letter}</div>
+                                        <div className="bar-fill" style={{ width: Math.max((count / maxLetterCount) * 100, 5) + '%', background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)' }}>
+                                            {count}x
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <h4 style={{ fontSize: '14px', marginBottom: '12px', color: '#111827' }}>Associate Frequency</h4>
+                        {sortedAssocs.length === 0 ? (
+                            <p style={{ color: '#6b7280', fontSize: '12px' }}>No associate data available.</p>
+                        ) : (
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                                    <thead>
+                                        <tr style={{ background: '#f3f4f6' }}>
+                                            <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '1px solid #e5e7eb' }}>Name</th>
+                                            <th style={{ textAlign: 'center', padding: '8px 12px', borderBottom: '1px solid #e5e7eb' }}>Shifts Assigned</th>
+                                            <th style={{ textAlign: 'center', padding: '8px 12px', borderBottom: '1px solid #e5e7eb' }}>Last Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {sortedAssocs.slice(0, 50).map(([name, info]) => (
+                                            <tr key={name} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                <td style={{ padding: '6px 12px' }}>{name}</td>
+                                                <td style={{ textAlign: 'center', padding: '6px 12px', fontWeight: '600', color: '#667eea' }}>{info.count}</td>
+                                                <td style={{ textAlign: 'center', padding: '6px 12px', color: '#6b7280' }}>{info.lastDate}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {sortedAssocs.length > 50 && (
+                                    <p style={{ textAlign: 'center', padding: '8px', color: '#6b7280', fontSize: '11px' }}>
+                                        Showing top 50 of {sortedAssocs.length} associates
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             );
