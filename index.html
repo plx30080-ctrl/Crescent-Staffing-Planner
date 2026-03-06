@@ -3161,6 +3161,24 @@
                 setLoading(false);
             };
 
+            const handleDeleteReport = async (report, e) => {
+                e.stopPropagation();
+                if (!confirm(`Delete the report for ${report.date} - ${report.shift} Shift? This cannot be undone.`)) return;
+
+                try {
+                    // Delete from Firebase if synced
+                    if (report.syncedToCloud && isFirebaseConfigured && db) {
+                        await db.ref('staffing/' + report.id).remove();
+                    }
+                    // Delete from localStorage
+                    storage.remove('staffing_' + report.id);
+                    setReports(prev => prev.filter(r => r.id !== report.id));
+                } catch (error) {
+                    console.error('Error deleting report:', error);
+                    alert('Error deleting report: ' + error.message);
+                }
+            };
+
             // Get current week boundaries (Sunday to Saturday)
             const getWeekBounds = () => {
                 const now = new Date();
@@ -3194,8 +3212,30 @@
                         key={report.id}
                         className="report-item"
                         onClick={() => onLoadShift(report.date, report.shift)}
+                        style={{ position: 'relative' }}
                     >
-                        <h4>
+                        <button
+                            onClick={(e) => handleDeleteReport(report, e)}
+                            title="Delete report"
+                            style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: '#9ca3af',
+                                fontSize: '14px',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                lineHeight: 1,
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={e => e.currentTarget.style.color = '#9ca3af'}
+                        >
+                            ✕
+                        </button>
+                        <h4 style={{ paddingRight: '24px' }}>
                             {report.date} - {report.shift} Shift
                             {report.syncedToCloud ? (
                                 <span className="cloud-badge synced">☁ Synced</span>
