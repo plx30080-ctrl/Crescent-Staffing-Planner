@@ -1067,6 +1067,82 @@
         .comparison-name.same { background: #f3f4f6; color: #374151; }
         .comparison-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
         .comparison-stat { text-align: center; padding: 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+
+        /* ── Barcode Scanner ── */
+        .scan-mode-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2000; color: white; }
+        .scan-mode-header { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .scan-mode-title { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+        .scan-mode-indicator { width: 14px; height: 14px; background: #22c55e; border-radius: 50%; animation: blink 1s infinite; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        .scan-mode-content { text-align: center; max-width: 560px; padding: 40px; }
+        .scan-prompt { font-size: 28px; font-weight: 300; margin-bottom: 16px; color: #d1d5db; }
+        .scan-icon { font-size: 100px; margin-bottom: 24px; animation: float 3s ease-in-out infinite; }
+        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+        .scan-result { background: white; border-radius: 16px; padding: 36px; text-align: center; min-width: 380px; max-width: 90%; animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        .scan-result.success { border: 4px solid #22c55e; }
+        .scan-result.error   { border: 4px solid #ef4444; }
+        .scan-result-icon { font-size: 56px; margin-bottom: 16px; }
+        .scan-result-icon.success { color: #22c55e; }
+        .scan-result-icon.error   { color: #ef4444; }
+        .scan-result-name { font-size: 26px; font-weight: 700; color: #111827; margin-bottom: 6px; }
+        .scan-result-id   { font-size: 14px; color: #6b7280; margin-bottom: 12px; }
+        .scan-result-message { font-size: 16px; color: #374151; line-height: 1.5; white-space: pre-line; }
+        .scan-result-assignment { background: #f0fdf4; border: 2px solid #22c55e; border-radius: 10px; padding: 16px; margin-top: 16px; }
+        .scan-result-assignment h4 { font-size: 11px; color: #166534; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+        .scan-result-assignment .line { font-size: 32px; font-weight: 700; color: #166534; }
+        .scan-result-assignment .leads { font-size: 14px; color: #15803d; margin-top: 6px; }
+        .manual-scan-section { margin-top: 24px; }
+        .manual-scan-input { padding: 10px 18px; font-size: 15px; border: 2px solid #4b5563; border-radius: 8px; background: #1f2937; color: white; width: 280px; text-align: center; }
+        .manual-scan-input:focus { outline: none; border-color: #8b5cf6; }
+        .manual-scan-input::placeholder { color: #6b7280; }
+        .scan-history { position: absolute; bottom: 20px; left: 20px; right: 20px; max-height: 130px; overflow-y: auto; }
+        .scan-history-title { font-size: 11px; color: #6b7280; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+        .scan-history-list { display: flex; gap: 6px; flex-wrap: wrap; }
+        .scan-history-item { background: rgba(255,255,255,0.1); border-radius: 4px; padding: 4px 10px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+        .scan-history-item.added     { border-left: 3px solid #22c55e; }
+        .scan-history-item.duplicate { border-left: 3px solid #f59e0b; }
+        .scan-history-item.unknown   { border-left: 3px solid #ef4444; }
+
+        /* ── Kiosk Mode ── */
+        .kiosk-mode { position: fixed; inset: 0; background: linear-gradient(135deg,#1f2937 0%,#111827 100%); display: flex; flex-direction: column; z-index: 3000; overflow: hidden; }
+        .kiosk-header { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); padding: 18px 28px; display: flex; justify-content: space-between; align-items: center; color: white; }
+        .kiosk-logo { font-size: 26px; font-weight: 700; }
+        .kiosk-time { font-size: 22px; font-weight: 300; }
+        .kiosk-main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; }
+        .kiosk-scan-area { text-align: center; color: white; }
+        .kiosk-scan-prompt { font-size: 42px; font-weight: 300; margin-bottom: 16px; color: #d1d5db; }
+        .kiosk-scan-icon { font-size: 160px; margin-bottom: 32px; animation: float 3s ease-in-out infinite; }
+        .kiosk-scan-hint { font-size: 16px; color: #6b7280; }
+        .kiosk-result { background: white; border-radius: 22px; padding: 52px; text-align: center; min-width: 440px; max-width: 90%; animation: scaleIn 0.3s ease-out; }
+        @keyframes scaleIn { from{opacity:0;transform:scale(0.92)} to{opacity:1;transform:scale(1)} }
+        .kiosk-result.success { border: 6px solid #22c55e; }
+        .kiosk-result.error   { border: 6px solid #ef4444; }
+        .kiosk-result-name { font-size: 38px; font-weight: 700; color: #111827; margin-bottom: 8px; }
+        .kiosk-result-id   { font-size: 18px; color: #6b7280; margin-bottom: 16px; }
+        .kiosk-result-message { font-size: 20px; color: #374151; line-height: 1.5; white-space: pre-line; }
+        .kiosk-assignment { background: linear-gradient(135deg,#22c55e 0%,#16a34a 100%); border-radius: 14px; padding: 26px; margin-top: 24px; color: white; }
+        .kiosk-assignment h4 { font-size: 13px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.9; }
+        .kiosk-assignment .line { font-size: 64px; font-weight: 700; }
+        .kiosk-assignment .leads { font-size: 20px; margin-top: 8px; opacity: 0.9; }
+        .kiosk-footer { padding: 18px 28px; display: flex; justify-content: space-between; align-items: center; color: #6b7280; font-size: 13px; }
+        .kiosk-exit-btn { padding: 9px 18px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: white; font-size: 13px; cursor: pointer; transition: background 0.2s; }
+        .kiosk-exit-btn:hover { background: rgba(255,255,255,0.2); }
+        .kiosk-staffing-view { flex: 1; padding: 20px; overflow: auto; background: #1f2937; }
+        .kiosk-staffing-header { text-align: center; color: white; margin-bottom: 18px; }
+        .kiosk-staffing-header h2 { font-size: 22px; margin-bottom: 6px; }
+        .kiosk-staffing-header p { color: #9ca3af; }
+        .kiosk-lines-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 16px; }
+        .kiosk-line-card { background: white; border-radius: 10px; overflow: hidden; }
+        .kiosk-line-header { background: linear-gradient(135deg,#667eea 0%,#764ba2 100%); color: white; padding: 12px; text-align: center; }
+        .kiosk-line-header h3 { font-size: 20px; margin-bottom: 2px; }
+        .kiosk-line-header p { font-size: 12px; opacity: 0.9; }
+        .kiosk-line-positions { padding: 8px; }
+        .kiosk-position { display: flex; align-items: center; padding: 6px 8px; border-radius: 5px; margin-bottom: 3px; }
+        .kiosk-position.filled { background: #f0fdf4; }
+        .kiosk-position.empty  { background: #f9fafb; color: #9ca3af; }
+        .kiosk-position-number { min-width: 22px; font-weight: 600; color: #6b7280; font-size: 12px; }
+        .kiosk-position-name { flex: 1; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -1133,6 +1209,13 @@
             const [isLocked, setIsLocked] = useState(false);
             const [undoStack, setUndoStack] = useState([]);
             const [undoMessage, setUndoMessage] = useState('');
+            const [activeAssociates, setActiveAssociates] = useState({});
+            const [isScanModeActive, setIsScanModeActive] = useState(false);
+            const [isKioskMode, setIsKioskMode] = useState(false);
+            const [scanResult, setScanResult] = useState(null);
+            const [scanHistory, setScanHistory] = useState([]);
+            const scanBufferRef = useRef('');
+            const lastKeyTimeRef = useRef(0);
             const saveTimeoutRef = useRef(null);
             const savingRef = useRef(false);
             const undoTimerRef = useRef(null);
@@ -1183,6 +1266,28 @@
                     });
                 }
             }, [coreAssociates, lineLeadNotes]);
+
+            // Load active associates (employee number → name mapping)
+            useEffect(() => {
+                const load = async () => {
+                    if (isFirebaseConfigured && db) {
+                        try {
+                            const snap = await db.ref('settings/activeAssociates').once('value');
+                            if (snap.exists()) { setActiveAssociates(snap.val()); return; }
+                        } catch(e) { console.error('Error loading active associates:', e); }
+                    }
+                    setActiveAssociates(storage.load('activeAssociates', {}));
+                };
+                load();
+            }, []);
+
+            // Save active associates
+            useEffect(() => {
+                storage.save('activeAssociates', activeAssociates);
+                if (isFirebaseConfigured && db && Object.keys(activeAssociates).length > 0) {
+                    db.ref('settings/activeAssociates').set(activeAssociates).catch(console.error);
+                }
+            }, [activeAssociates]);
 
             // Auto-save functionality
             useEffect(() => {
@@ -1952,128 +2057,470 @@
                 }
             };
 
+            // ── Barcode scanner helpers ──────────────────────────────────────────────
+
+            const extractEmployeeNumber = (badgeData) => {
+                const plxMatch = badgeData.match(/PLX-(\d+)-[A-Z]{3}/i);
+                if (plxMatch) return plxMatch[1];
+                const nums = badgeData.replace(/\D/g, '');
+                return nums.length >= 6 ? nums : null;
+            };
+
+            const isEmployeeAlreadyPresent = (employeeNumber) => {
+                if (waitlist.some(w => w.employeeNumber === employeeNumber))
+                    return { present: true, location: 'waitlist' };
+                for (const line of lines) {
+                    for (const pos of line.positions) {
+                        if (pos.employeeNumber === employeeNumber)
+                            return { present: true, location: `Line ${line.letter}` };
+                    }
+                }
+                return { present: false };
+            };
+
+            const findLineAssignment = (employeeNumber) => {
+                for (const line of lines) {
+                    for (const pos of line.positions) {
+                        if (pos.employeeNumber === employeeNumber)
+                            return { line: line.letter, leads: line.leads || [] };
+                    }
+                }
+                return null;
+            };
+
+            const processScan = (badgeData) => {
+                const employeeNumber = extractEmployeeNumber(badgeData);
+                if (!employeeNumber) {
+                    const result = { status: 'unknown', message: 'Invalid badge format.', timestamp: Date.now() };
+                    setScanResult(result);
+                    setScanHistory(prev => [result, ...prev.slice(0, 49)]);
+                    return;
+                }
+
+                const associate = activeAssociates[employeeNumber];
+                if (!associate) {
+                    const result = { status: 'unknown', employeeNumber, message: 'Badge not recognised.\nPlease see the SPM for assistance.', timestamp: Date.now() };
+                    setScanResult(result);
+                    setScanHistory(prev => [result, ...prev.slice(0, 49)]);
+                    return;
+                }
+
+                const presenceCheck = isEmployeeAlreadyPresent(employeeNumber);
+                if (presenceCheck.present) {
+                    const lineAssignment = presenceCheck.location !== 'waitlist' ? findLineAssignment(employeeNumber) : null;
+                    const result = { status: 'duplicate', employeeNumber, associate, lineAssignment, message: `Welcome back, ${associate.firstName}!`, timestamp: Date.now() };
+                    setScanResult(result);
+                    setScanHistory(prev => [result, ...prev.slice(0, 49)]);
+                    return;
+                }
+
+                // Add to waitlist
+                const fullName = `${associate.firstName} ${associate.lastName}`;
+                setWaitlist(prev => [...prev, { id: Date.now() + Math.random(), name: fullName, isNew: false, employeeNumber }]);
+                const lineAssignment = findLineAssignment(employeeNumber);
+                const result = { status: 'added', employeeNumber, associate, lineAssignment, message: `Welcome, ${associate.firstName}!`, timestamp: Date.now() };
+                setScanResult(result);
+                setScanHistory(prev => [result, ...prev.slice(0, 49)]);
+
+                // Log to Firebase
+                if (isFirebaseConfigured && db) {
+                    db.ref(`scanLog/${currentDate}_${currentShift}/${Date.now()}`).set({
+                        employeeNumber, name: fullName, status: 'added', timestamp: new Date().toISOString()
+                    }).catch(console.error);
+                }
+            };
+
+            // Keyboard-wedge scanner listener
+            useEffect(() => {
+                if (!isScanModeActive && !isKioskMode) return;
+                const handleKey = (e) => {
+                    const now = Date.now();
+                    if (now - lastKeyTimeRef.current > 100) scanBufferRef.current = '';
+                    lastKeyTimeRef.current = now;
+                    if (e.key === 'Enter') {
+                        const data = scanBufferRef.current.trim();
+                        if (data.length >= 6) { e.preventDefault(); processScan(data); }
+                        scanBufferRef.current = '';
+                        return;
+                    }
+                    if (e.key.length > 1) return;
+                    if (scanBufferRef.current.length > 0) e.preventDefault();
+                    scanBufferRef.current += e.key;
+                };
+                window.addEventListener('keydown', handleKey, true);
+                return () => window.removeEventListener('keydown', handleKey, true);
+            }, [isScanModeActive, isKioskMode, activeAssociates, waitlist, lines]);
+
+            // Auto-clear scan result after 5 seconds
+            useEffect(() => {
+                if (!scanResult) return;
+                const t = setTimeout(() => setScanResult(null), 5000);
+                return () => clearTimeout(t);
+            }, [scanResult]);
+
             return (
-                <div className="container">
-                    <div className="header">
-                        <h1>Crescent Staffing Planner</h1>
-                        <div className="header-actions">
-                            {lines.length > 0 && (
-                                <>
-                                    <button className="btn btn-secondary" onClick={() => window.print()}>
-                                        Print
-                                    </button>
-                                    <button className="btn btn-secondary" onClick={handleExport}>
-                                        Export
-                                    </button>
-                                    <button className="btn btn-danger" onClick={handleClearAll}>
-                                        Clear
-                                    </button>
-                                </>
+                <>
+                    {/* Scanner overlays rendered outside the main container */}
+                    {isScanModeActive && (
+                        <ScanModeOverlay
+                            scanResult={scanResult}
+                            scanHistory={scanHistory}
+                            onToggle={() => { setIsScanModeActive(false); setScanResult(null); }}
+                            onManualScan={processScan}
+                        />
+                    )}
+                    {isKioskMode && (
+                        <KioskMode
+                            lines={lines}
+                            currentDate={currentDate}
+                            currentShift={currentShift}
+                            scanResult={scanResult}
+                            onToggle={() => { setIsKioskMode(false); setScanResult(null); }}
+                            onManualScan={processScan}
+                        />
+                    )}
+
+                    <div className="container">
+                        <div className="header">
+                            <h1>Crescent Staffing Planner</h1>
+                            <div className="header-actions">
+                                {lines.length > 0 && (
+                                    <>
+                                        <button className="btn btn-secondary" onClick={() => setIsScanModeActive(true)}
+                                            title="Activate barcode scan mode">
+                                            Scan Mode
+                                        </button>
+                                        <button className="btn btn-secondary" onClick={() => setIsKioskMode(true)}
+                                            title="Full-screen kiosk for associate badge scanning">
+                                            Kiosk
+                                        </button>
+                                        <button className="btn btn-secondary" onClick={() => window.print()}>
+                                            Print
+                                        </button>
+                                        <button className="btn btn-secondary" onClick={handleExport}>
+                                            Export
+                                        </button>
+                                        <button className="btn btn-danger" onClick={handleClearAll}>
+                                            Clear
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="content">
+                            <div className="tabs">
+                                <button
+                                    className={`tab ${activeTab === 'setup' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('setup')}
+                                >
+                                    Setup
+                                </button>
+                                <button
+                                    className={`tab ${activeTab === 'staffing' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('staffing')}
+                                >
+                                    Staffing
+                                </button>
+                                <button
+                                    className={`tab ${activeTab === 'reporting' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('reporting')}
+                                >
+                                    Reports
+                                </button>
+                                <button
+                                    className={`tab ${activeTab === 'core' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('core')}
+                                >
+                                    Core Team
+                                </button>
+                                <button
+                                    className={`tab ${activeTab === 'employees' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('employees')}
+                                >
+                                    Employees
+                                </button>
+                                <button
+                                    className={`tab ${activeTab === 'analytics' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('analytics')}
+                                >
+                                    Analytics
+                                </button>
+                            </div>
+
+                            {activeTab === 'setup' && (
+                                <SetupView
+                                    onSetupShift={handleSetupShift}
+                                    coreAssociates={coreAssociates}
+                                    initialDate={currentDate}
+                                    initialShift={currentShift}
+                                />
+                            )}
+
+                            {activeTab === 'staffing' && (
+                                <StaffingView
+                                    lines={lines}
+                                    waitlist={waitlist}
+                                    currentDate={currentDate}
+                                    currentShift={currentShift}
+                                    saveStatus={saveStatus}
+                                    setSaveStatus={setSaveStatus}
+                                    isLocked={isLocked}
+                                    coreAssociates={coreAssociates}
+                                    undoMessage={undoMessage}
+                                    onUndo={handleUndo}
+                                    onToggleLock={handleToggleLock}
+                                    onUpdatePosition={handleUpdatePosition}
+                                    onUpdateWaitlistItem={handleUpdateWaitlistItem}
+                                    onAddWaitlistItem={handleAddWaitlistItem}
+                                    onQuickAddWaitlist={handleQuickAddWaitlist}
+                                    onRemoveWaitlistItem={handleRemoveWaitlistItem}
+                                    onAddLine={handleAddLine}
+                                    onRemoveLine={handleRemoveLine}
+                                    onUpdateLine={handleUpdateLine}
+                                    onToggleCutLine={handleToggleCutLine}
+                                    onDragStart={handleDragStart}
+                                    onDragOver={handleDragOver}
+                                    onDrop={handleDrop}
+                                    setLines={setLines}
+                                    setWaitlist={setWaitlist}
+                                />
+                            )}
+
+                            {activeTab === 'reporting' && (
+                                <ReportingView
+                                    onLoadShift={(date, shift) => {
+                                        setCurrentDate(date);
+                                        setCurrentShift(shift);
+                                        loadStaffingData(date, shift);
+                                        setActiveTab('staffing');
+                                    }}
+                                />
+                            )}
+
+                            {activeTab === 'analytics' && (
+                                <AnalyticsView />
+                            )}
+
+                            {activeTab === 'core' && (
+                                <CoreAssociatesView
+                                    coreAssociates={coreAssociates}
+                                    lineLeadNotes={lineLeadNotes}
+                                    onAddCoreAssociate={handleAddCoreAssociate}
+                                    onRemoveCoreAssociate={handleRemoveCoreAssociate}
+                                    onUpdateCoreAssociate={handleUpdateCoreAssociate}
+                                    onDeleteLineLead={handleDeleteLineLead}
+                                    onRenameLineLead={handleRenameLineLead}
+                                    onUpdateLineLeadNotes={handleUpdateLineLeadNotes}
+                                    firebaseStatus={firebaseStatus}
+                                />
+                            )}
+
+                            {activeTab === 'employees' && (
+                                <EmployeesView
+                                    activeAssociates={activeAssociates}
+                                    onUpdate={setActiveAssociates}
+                                />
                             )}
                         </div>
                     </div>
+                </>
+            );
+        }
 
-                    <div className="content">
-                        <div className="tabs">
-                            <button
-                                className={`tab ${activeTab === 'setup' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('setup')}
-                            >
-                                Setup
-                            </button>
-                            <button
-                                className={`tab ${activeTab === 'staffing' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('staffing')}
-                            >
-                                Staffing
-                            </button>
-                            <button
-                                className={`tab ${activeTab === 'reporting' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('reporting')}
-                            >
-                                Reports
-                            </button>
-                            <button
-                                className={`tab ${activeTab === 'core' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('core')}
-                            >
-                                Core Team
-                            </button>
-                            <button
-                                className={`tab ${activeTab === 'analytics' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('analytics')}
-                            >
-                                Analytics
-                            </button>
+        // ── Scan Mode Overlay ──────────────────────────────────────────────────────
+        function ScanModeOverlay({ scanResult, scanHistory, onToggle, onManualScan }) {
+            const [manualInput, setManualInput] = React.useState('');
+            const inputRef = React.useRef(null);
+            React.useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, [scanResult]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (manualInput.trim()) { onManualScan(manualInput.trim()); setManualInput(''); }
+            };
+
+            const statusClass = scanResult
+                ? (scanResult.status === 'added' || scanResult.status === 'duplicate' ? 'success' : 'error')
+                : '';
+            const icon = scanResult
+                ? (scanResult.status === 'added' ? '✓' : scanResult.status === 'duplicate' ? '↩' : '?')
+                : '';
+
+            return (
+                <div className="scan-mode-overlay">
+                    <div className="scan-mode-header">
+                        <div className="scan-mode-title">
+                            <div className="scan-mode-indicator" />
+                            Scan Mode Active
                         </div>
+                        <button className="btn btn-danger" onClick={onToggle}>Exit Scan Mode</button>
+                    </div>
 
-                        {activeTab === 'setup' && (
-                            <SetupView
-                                onSetupShift={handleSetupShift}
-                                coreAssociates={coreAssociates}
-                                initialDate={currentDate}
-                                initialShift={currentShift}
-                            />
+                    <div className="scan-mode-content">
+                        {scanResult ? (
+                            <div className={`scan-result ${statusClass}`}>
+                                <div className={`scan-result-icon ${statusClass}`}>{icon}</div>
+                                {scanResult.associate ? (
+                                    <>
+                                        <div className="scan-result-name">{scanResult.associate.firstName} {scanResult.associate.lastName}</div>
+                                        <div className="scan-result-id">Employee #{scanResult.employeeNumber}</div>
+                                    </>
+                                ) : (
+                                    <div className="scan-result-name">Unknown Badge</div>
+                                )}
+                                <div className="scan-result-message">{scanResult.message}</div>
+                                {scanResult.lineAssignment && (
+                                    <div className="scan-result-assignment">
+                                        <h4>Your Assignment</h4>
+                                        <div className="line">Line {scanResult.lineAssignment.line}</div>
+                                        {scanResult.lineAssignment.leads.length > 0 && (
+                                            <div className="leads">Lead(s): {scanResult.lineAssignment.leads.join(', ')}</div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                <div className="scan-icon">📷</div>
+                                <div className="scan-prompt">Scan a badge...</div>
+                                <div className="manual-scan-section">
+                                    <form onSubmit={handleSubmit}>
+                                        <input ref={inputRef} type="text" className="manual-scan-input" value={manualInput}
+                                            onChange={e => setManualInput(e.target.value)} placeholder="Or type employee number…" />
+                                    </form>
+                                </div>
+                            </>
                         )}
+                    </div>
 
-                        {activeTab === 'staffing' && (
-                            <StaffingView
-                                lines={lines}
-                                waitlist={waitlist}
-                                currentDate={currentDate}
-                                currentShift={currentShift}
-                                saveStatus={saveStatus}
-                                setSaveStatus={setSaveStatus}
-                                isLocked={isLocked}
-                                coreAssociates={coreAssociates}
-                                undoMessage={undoMessage}
-                                onUndo={handleUndo}
-                                onToggleLock={handleToggleLock}
-                                onUpdatePosition={handleUpdatePosition}
-                                onUpdateWaitlistItem={handleUpdateWaitlistItem}
-                                onAddWaitlistItem={handleAddWaitlistItem}
-                                onQuickAddWaitlist={handleQuickAddWaitlist}
-                                onRemoveWaitlistItem={handleRemoveWaitlistItem}
-                                onAddLine={handleAddLine}
-                                onRemoveLine={handleRemoveLine}
-                                onUpdateLine={handleUpdateLine}
-                                onToggleCutLine={handleToggleCutLine}
-                                onDragStart={handleDragStart}
-                                onDragOver={handleDragOver}
-                                onDrop={handleDrop}
-                                setLines={setLines}
-                                setWaitlist={setWaitlist}
-                            />
-                        )}
+                    {scanHistory.length > 0 && !scanResult && (
+                        <div className="scan-history">
+                            <div className="scan-history-title">Recent Scans</div>
+                            <div className="scan-history-list">
+                                {scanHistory.slice(0, 10).map((s, i) => (
+                                    <div key={i} className={`scan-history-item ${s.status}`}>
+                                        <span>{s.associate ? `${s.associate.firstName} ${s.associate.lastName}` : s.employeeNumber || 'Unknown'}</span>
+                                        <span style={{ opacity: 0.6, fontSize: '10px' }}>{new Date(s.timestamp).toLocaleTimeString()}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
 
-                        {activeTab === 'reporting' && (
-                            <ReportingView
-                                onLoadShift={(date, shift) => {
-                                    setCurrentDate(date);
-                                    setCurrentShift(shift);
-                                    loadStaffingData(date, shift);
-                                    setActiveTab('staffing');
-                                }}
-                            />
-                        )}
+        // ── Kiosk Mode ────────────────────────────────────────────────────────────
+        function KioskMode({ lines, currentDate, currentShift, scanResult, onToggle, onManualScan }) {
+            const [currentTime, setCurrentTime] = React.useState(new Date());
+            const [showStaffing, setShowStaffing] = React.useState(false);
+            const [manualInput, setManualInput] = React.useState('');
+            const inputRef = React.useRef(null);
 
-                        {activeTab === 'analytics' && (
-                            <AnalyticsView />
-                        )}
+            React.useEffect(() => {
+                const t = setInterval(() => setCurrentTime(new Date()), 1000);
+                return () => clearInterval(t);
+            }, []);
 
-                        {activeTab === 'core' && (
-                            <CoreAssociatesView
-                                coreAssociates={coreAssociates}
-                                lineLeadNotes={lineLeadNotes}
-                                onAddCoreAssociate={handleAddCoreAssociate}
-                                onRemoveCoreAssociate={handleRemoveCoreAssociate}
-                                onUpdateCoreAssociate={handleUpdateCoreAssociate}
-                                onDeleteLineLead={handleDeleteLineLead}
-                                onRenameLineLead={handleRenameLineLead}
-                                onUpdateLineLeadNotes={handleUpdateLineLeadNotes}
-                                firebaseStatus={firebaseStatus}
-                            />
+            React.useEffect(() => {
+                if (!scanResult && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
+            }, [scanResult]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (manualInput.trim()) { onManualScan(manualInput.trim()); setManualInput(''); }
+            };
+
+            const statusClass = scanResult
+                ? (scanResult.status === 'added' || scanResult.status === 'duplicate' ? 'success' : 'error')
+                : '';
+            const icon = scanResult
+                ? (scanResult.status === 'added' ? '✓' : scanResult.status === 'duplicate' ? '✓' : '?')
+                : '';
+
+            const activeLines = (lines || []).filter(l => !l.isCut);
+
+            return (
+                <div className="kiosk-mode">
+                    <div className="kiosk-header">
+                        <div className="kiosk-logo">Crescent Staffing</div>
+                        <div className="kiosk-time">{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+
+                    <div className="kiosk-main">
+                        {showStaffing ? (
+                            <div className="kiosk-staffing-view" style={{ flex: 1, width: '100%' }}>
+                                <div className="kiosk-staffing-header">
+                                    <h2>Today's Staffing</h2>
+                                    <p>{currentDate} • {currentShift} Shift</p>
+                                </div>
+                                <div className="kiosk-lines-grid">
+                                    {activeLines.map(line => (
+                                        <div key={line.id} className="kiosk-line-card">
+                                            <div className="kiosk-line-header">
+                                                <h3>Line {line.letter}</h3>
+                                                <p>{(line.leads || []).join(', ') || 'No lead'}</p>
+                                            </div>
+                                            <div className="kiosk-line-positions">
+                                                {line.positions.map((pos, idx) => (
+                                                    <div key={pos.id} className={`kiosk-position ${pos.name.trim() ? 'filled' : 'empty'}`}>
+                                                        <span className="kiosk-position-number">{idx + 1}</span>
+                                                        <span className="kiosk-position-name">{pos.name.trim() || '—'}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : scanResult ? (
+                            <div className={`kiosk-result ${statusClass}`}>
+                                <div style={{ fontSize: '80px', marginBottom: '20px' }}>{icon}</div>
+                                {scanResult.associate ? (
+                                    <>
+                                        <div className="kiosk-result-name">{scanResult.associate.firstName} {scanResult.associate.lastName}</div>
+                                        <div className="kiosk-result-id">Employee #{scanResult.employeeNumber}</div>
+                                    </>
+                                ) : (
+                                    <div className="kiosk-result-name">Unknown Badge</div>
+                                )}
+                                <div className="kiosk-result-message">{scanResult.message?.split('\n')[0]}</div>
+                                {scanResult.lineAssignment && (
+                                    <div className="kiosk-assignment">
+                                        <h4>Your Assignment</h4>
+                                        <div className="line">Line {scanResult.lineAssignment.line}</div>
+                                        {scanResult.lineAssignment.leads.length > 0 && (
+                                            <div className="leads">Lead(s): {scanResult.lineAssignment.leads.join(', ')}</div>
+                                        )}
+                                    </div>
+                                )}
+                                {!scanResult.associate && (
+                                    <div style={{ marginTop: '24px', padding: '16px', background: '#fef3c7', borderRadius: '10px', color: '#92400e', fontSize: '16px' }}>
+                                        Please see the SPM for assistance
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="kiosk-scan-area">
+                                <div className="kiosk-scan-icon">📷</div>
+                                <div className="kiosk-scan-prompt">Scan Your Badge</div>
+                                <div className="kiosk-scan-hint">Hold your badge up to the scanner</div>
+                                <form onSubmit={handleSubmit} style={{ marginTop: '20px' }}>
+                                    <input ref={inputRef} type="text" className="manual-scan-input" value={manualInput}
+                                        onChange={e => setManualInput(e.target.value)} placeholder="Manual entry…" style={{ opacity: 0.4 }} />
+                                </form>
+                            </div>
                         )}
+                    </div>
+
+                    <div className="kiosk-footer">
+                        <div>{currentDate} • {currentShift} Shift</div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button className="kiosk-exit-btn" onClick={() => setShowStaffing(s => !s)}>
+                                {showStaffing ? 'Back to Scan' : 'View Staffing'}
+                            </button>
+                            <button className="kiosk-exit-btn" onClick={onToggle}>Exit Kiosk</button>
+                        </div>
                     </div>
                 </div>
             );
@@ -4129,6 +4576,143 @@
                         <div className="empty-state">
                             <p>Select two shifts above to compare them side by side.</p>
                         </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── Employees View ────────────────────────────────────────────────────────
+        function EmployeesView({ activeAssociates, onUpdate }) {
+            const [empNumber, setEmpNumber] = React.useState('');
+            const [firstName, setFirstName] = React.useState('');
+            const [lastName, setLastName]   = React.useState('');
+            const [search, setSearch]       = React.useState('');
+            const [csvError, setCsvError]   = React.useState('');
+
+            const handleAdd = (e) => {
+                e.preventDefault();
+                const num = empNumber.trim();
+                if (!num || !firstName.trim() || !lastName.trim()) return;
+                onUpdate({ ...activeAssociates, [num]: { firstName: firstName.trim(), lastName: lastName.trim(), employeeNumber: num } });
+                setEmpNumber(''); setFirstName(''); setLastName('');
+            };
+
+            const handleDelete = (num) => {
+                if (!confirm(`Remove employee #${num}?`)) return;
+                const updated = { ...activeAssociates };
+                delete updated[num];
+                onUpdate(updated);
+            };
+
+            const handleCsvImport = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setCsvError('');
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const lines = ev.target.result.split('\n').filter(l => l.trim());
+                    const updated = { ...activeAssociates };
+                    let count = 0;
+                    for (const line of lines) {
+                        // Supports: employeeNumber,firstName,lastName or employeeNumber,fullName
+                        const parts = line.split(',').map(p => p.trim());
+                        if (parts.length < 2) continue;
+                        const [num, fn, ln] = parts;
+                        if (!num) continue;
+                        const parsedFirst = fn || '';
+                        const parsedLast  = ln || '';
+                        updated[num] = { firstName: parsedFirst, lastName: parsedLast, employeeNumber: num };
+                        count++;
+                    }
+                    onUpdate(updated);
+                    setCsvError(`Imported ${count} employee(s).`);
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+            };
+
+            const entries = Object.values(activeAssociates)
+                .filter(a => {
+                    if (!search) return true;
+                    const q = search.toLowerCase();
+                    return a.employeeNumber.includes(q) || a.firstName.toLowerCase().includes(q) || a.lastName.toLowerCase().includes(q);
+                })
+                .sort((a, b) => a.lastName.localeCompare(b.lastName));
+
+            return (
+                <div>
+                    <h3 style={{ marginBottom: '4px' }}>Employee Database</h3>
+                    <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '16px' }}>
+                        Map employee badge numbers to names for barcode scanning. Supported format: <code>PLX-XXXXXXXX-XXX</code> or plain numbers.
+                    </p>
+
+                    {/* Add employee */}
+                    <form onSubmit={handleAdd} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'flex-end' }}>
+                        <div className="form-group" style={{ margin: 0 }}>
+                            <label style={{ fontSize: '11px', fontWeight: 600 }}>Employee #</label>
+                            <input value={empNumber} onChange={e => setEmpNumber(e.target.value)} placeholder="e.g. 12345678"
+                                style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', width: '140px', display: 'block' }} />
+                        </div>
+                        <div className="form-group" style={{ margin: 0 }}>
+                            <label style={{ fontSize: '11px', fontWeight: 600 }}>First Name</label>
+                            <input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First"
+                                style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', width: '120px', display: 'block' }} />
+                        </div>
+                        <div className="form-group" style={{ margin: 0 }}>
+                            <label style={{ fontSize: '11px', fontWeight: 600 }}>Last Name</label>
+                            <input value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last"
+                                style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', width: '120px', display: 'block' }} />
+                        </div>
+                        <button type="submit" className="btn btn-primary" style={{ background: '#667eea', color: 'white', alignSelf: 'flex-end' }}>Add</button>
+                    </form>
+
+                    {/* CSV import */}
+                    <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <label className="btn btn-secondary" style={{ cursor: 'pointer', fontSize: '12px', padding: '6px 14px' }}>
+                            Import CSV
+                            <input type="file" accept=".csv,.txt" onChange={handleCsvImport} style={{ display: 'none' }} />
+                        </label>
+                        <span style={{ fontSize: '11px', color: '#6b7280' }}>CSV format: employeeNumber,firstName,lastName (one per line)</span>
+                        {csvError && <span style={{ fontSize: '12px', color: '#10b981', fontWeight: 600 }}>{csvError}</span>}
+                    </div>
+
+                    {/* Search */}
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search employees…"
+                        style={{ padding: '7px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', width: '100%', marginBottom: '12px' }} />
+
+                    {/* Table */}
+                    <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>{entries.length} employee{entries.length !== 1 ? 's' : ''}</div>
+                    {entries.length === 0 ? (
+                        <div className="empty-state">
+                            <h3>No Employees</h3>
+                            <p>Add employees above or import a CSV to enable barcode scanning.</p>
+                        </div>
+                    ) : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                            <thead>
+                                <tr style={{ background: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                                    <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600 }}>Employee #</th>
+                                    <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600 }}>First Name</th>
+                                    <th style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600 }}>Last Name</th>
+                                    <th style={{ padding: '8px 10px', width: '50px' }}></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {entries.map(a => (
+                                    <tr key={a.employeeNumber} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                        <td style={{ padding: '7px 10px', fontFamily: 'monospace' }}>{a.employeeNumber}</td>
+                                        <td style={{ padding: '7px 10px' }}>{a.firstName}</td>
+                                        <td style={{ padding: '7px 10px' }}>{a.lastName}</td>
+                                        <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                                            <button onClick={() => handleDelete(a.employeeNumber)}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '14px' }}
+                                                onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                                                onMouseLeave={e => e.currentTarget.style.color = '#9ca3af'}>✕</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     )}
                 </div>
             );
