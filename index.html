@@ -3110,6 +3110,101 @@
             );
         }
 
+        const parseStaffingXLSX = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const wb = XLSX.read(data, { type: 'array' });
+                        const ws = wb.Sheets['Staffing'];
+                        if (!ws) {
+                            reject(new Error('Sheet "Staffing" not found. Please upload a file exported from this tool.'));
+                            return;
+                        }
+
+                        // Use defval:'' so every cell in the range comes back as a string
+                        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+                        // Row 1: "{date} - {shift} Shift"
+                        const infoStr = (rows[1]?.[0] || '').toString();
+                        const dateShiftMatch = infoStr.match(/^(\d{4}-\d{2}-\d{2})\s*-\s*(\w+)\s+Shift/);
+                        if (!dateShiftMatch) {
+                            reject(new Error(`Could not parse date/shift from: "${infoStr}"`));
+                            return;
+                        }
+                        const date = dateShiftMatch[1];
+                        const shift = dateShiftMatch[2];
+
+                        // Row 4: "Line A", "", "Line B", "", ..., "WAITLIST"
+                        const headerRow = rows[4] || [];
+                        const lineData = [];
+                        let waitlistColIndex = -1;
+
+                        for (let c = 0; c < headerRow.length; c++) {
+                            const header = (headerRow[c] || '').toString().trim();
+                            if (header === 'WAITLIST') {
+                                waitlistColIndex = c;
+                                break;
+                            }
+                            if (header.startsWith('Line ')) {
+                                const isCut = header.includes('(CUT)');
+                                const letter = header.replace(/^Line\s+/, '').replace(/\s*\(CUT\)\s*$/, '').trim();
+                                lineData.push({ colIndex: c, letter, isCut, leads: [], positions: [] });
+                                c++; // skip the blank spacing column
+                            }
+                        }
+
+                        if (waitlistColIndex === -1) waitlistColIndex = lineData.length * 2;
+
+                        // Row 5: lead names (comma-separated per line)
+                        const leadsRow = rows[5] || [];
+                        lineData.forEach(line => {
+                            const leadStr = (leadsRow[line.colIndex] || '').toString().trim();
+                            line.leads = (leadStr && leadStr !== 'No lead')
+                                ? leadStr.split(', ').map(s => s.trim()).filter(Boolean)
+                                : [];
+                        });
+
+                        // Rows 6+: one row per position slot
+                        const waitlist = [];
+                        for (let r = 6; r < rows.length; r++) {
+                            const row = rows[r] || [];
+                            lineData.forEach(line => {
+                                const cellVal = (row[line.colIndex] || '').toString().trim();
+                                const isNew = cellVal.includes('⭐');
+                                const name = cellVal.replace(/\s*⭐\s*/g, '').trim();
+                                if (name) {
+                                    line.positions.push({ id: Date.now() + Math.random(), name, isNew });
+                                }
+                            });
+                            const wCell = (row[waitlistColIndex] || '').toString().trim();
+                            const wIsNew = wCell.includes('⭐');
+                            const wName = wCell.replace(/\s*⭐\s*/g, '').trim();
+                            if (wName) {
+                                waitlist.push({ id: Date.now() + Math.random(), name: wName, isNew: wIsNew });
+                            }
+                        }
+
+                        const lines = lineData.map(line => ({
+                            id: Date.now() + Math.random(),
+                            letter: line.letter,
+                            leads: line.leads,
+                            needed: Math.max(line.positions.length, 1),
+                            isCut: line.isCut,
+                            positions: line.positions
+                        }));
+
+                        resolve({ date, shift, lines, waitlist });
+                    } catch (err) {
+                        reject(new Error('Failed to parse file: ' + err.message));
+                    }
+                };
+                reader.onerror = () => reject(new Error('Failed to read file'));
+                reader.readAsArrayBuffer(file);
+            });
+        };
+
         function ReportingView({ onLoadShift }) {
             const [reports, setReports] = useState([]);
             const [loading, setLoading] = useState(false);
@@ -3118,6 +3213,8 @@
             const [showComparison, setShowComparison] = useState(false);
             const [compareIdA, setCompareIdA] = useState('');
             const [compareIdB, setCompareIdB] = useState('');
+            const importInputRef = useRef(null);
+            const [importStatus, setImportStatus] = useState('');
 
             useEffect(() => {
                 loadReports();
@@ -3187,6 +3284,63 @@
                 } catch (error) {
                     console.error('Error deleting report:', error);
                     alert('Error deleting report: ' + error.message);
+                }
+            };
+
+            const handleImportClick = () => {
+                importInputRef.current?.click();
+            };
+
+            const handleImportFile = async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                e.target.value = ''; // allow re-selecting the same file
+
+                try {
+                    setImportStatus('Parsing...');
+                    const { date, shift, lines, waitlist } = await parseStaffingXLSX(file);
+                    const totalPeople = lines.reduce((sum, l) => sum + l.positions.length, 0);
+
+                    const confirmed = confirm(
+                        `Import: ${date} - ${shift} Shift\n` +
+                        `${lines.length} line${lines.length !== 1 ? 's' : ''}, ${totalPeople} people assigned` +
+                        (waitlist.length > 0 ? `, ${waitlist.length} on waitlist` : '') +
+                        `\n\nSave this to your reports?`
+                    );
+                    if (!confirmed) { setImportStatus(''); return; }
+
+                    const docId = `${date}_${shift}`;
+                    let alreadyExists = false;
+                    if (isFirebaseConfigured && db) {
+                        const snap = await db.ref('staffing/' + docId).once('value');
+                        alreadyExists = snap.exists();
+                    }
+                    if (!alreadyExists) {
+                        alreadyExists = storage.load(`staffing_${date}_${shift}`, null) !== null;
+                    }
+                    if (alreadyExists) {
+                        const overwrite = confirm(`A report for ${date} - ${shift} Shift already exists. Overwrite it?`);
+                        if (!overwrite) { setImportStatus(''); return; }
+                    }
+
+                    const staffingData = {
+                        date, shift, lines, waitlist,
+                        locked: false,
+                        lastUpdated: new Date().toISOString()
+                    };
+
+                    if (isFirebaseConfigured && db) {
+                        await db.ref('staffing/' + docId).set(staffingData);
+                    }
+                    storage.save(`staffing_${date}_${shift}`, staffingData);
+
+                    setImportStatus(`Imported ${date} - ${shift} ✓`);
+                    setTimeout(() => setImportStatus(''), 4000);
+                    loadReports();
+                } catch (err) {
+                    console.error('Import error:', err);
+                    setImportStatus(`Error: ${err.message}`);
+                    setTimeout(() => setImportStatus(''), 6000);
                 }
             };
 
@@ -3327,15 +3481,37 @@
                             <div style={{ fontSize: '12px', color: '#6b7280' }}>
                                 {filteredReports.length} report{filteredReports.length !== 1 ? 's' : ''} found
                             </div>
-                            {reports.length >= 2 && (
+                            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                {importStatus && (
+                                    <span style={{ fontSize: '12px', color: importStatus.startsWith('Error') ? '#ef4444' : '#10b981' }}>
+                                        {importStatus}
+                                    </span>
+                                )}
                                 <button
-                                    className={`btn ${showComparison ? 'btn-primary' : 'btn-secondary'}`}
-                                    onClick={() => setShowComparison(!showComparison)}
-                                    style={{ fontSize: '12px', padding: '6px 14px', marginLeft: 'auto' }}
+                                    className="btn btn-secondary"
+                                    onClick={handleImportClick}
+                                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                                    title="Upload a previously exported .xlsx staffing sheet to restore it"
                                 >
-                                    {showComparison ? 'Hide Compare' : 'Compare'}
+                                    Import XLSX
                                 </button>
-                            )}
+                                {reports.length >= 2 && (
+                                    <button
+                                        className={`btn ${showComparison ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => setShowComparison(!showComparison)}
+                                        style={{ fontSize: '12px', padding: '6px 14px' }}
+                                    >
+                                        {showComparison ? 'Hide Compare' : 'Compare'}
+                                    </button>
+                                )}
+                            </div>
+                            <input
+                                ref={importInputRef}
+                                type="file"
+                                accept=".xlsx"
+                                onChange={handleImportFile}
+                                style={{ display: 'none' }}
+                            />
                         </div>
                     </div>
 
