@@ -1136,6 +1136,7 @@
             const saveTimeoutRef = useRef(null);
             const savingRef = useRef(false);
             const undoTimerRef = useRef(null);
+            const isLoadingRef = useRef(false);
 
             // Load core associates from Firebase and localStorage
             useEffect(() => {
@@ -1187,6 +1188,7 @@
             // Auto-save functionality
             useEffect(() => {
                 if (lines.length === 0) return;
+                if (isLoadingRef.current) return;
 
                 if (saveTimeoutRef.current) {
                     clearTimeout(saveTimeoutRef.current);
@@ -1251,40 +1253,48 @@
 
             const loadStaffingData = async (date, shift) => {
                 console.log('Loading staffing data for:', date, shift);
+                isLoadingRef.current = true;
 
-                // Try Firebase first
-                if (isFirebaseConfigured && db) {
-                    try {
-                        const docId = `${date}_${shift}`;
-                        const snapshot = await db.ref('staffing/' + docId).once('value');
-                        if (snapshot.exists()) {
-                            const data = snapshot.val();
-                            console.log('Loaded from Firebase Realtime Database:', docId, data);
-                            setLines(data.lines || []);
-                            setWaitlist(data.waitlist || []);
-                            setIsLocked(data.locked || false);
-                            return;
-                        } else {
-                            console.log('Document not found in Firebase:', docId);
+                try {
+                    // Try Firebase first
+                    if (isFirebaseConfigured && db) {
+                        try {
+                            const docId = `${date}_${shift}`;
+                            const snapshot = await db.ref('staffing/' + docId).once('value');
+                            if (snapshot.exists()) {
+                                const data = snapshot.val();
+                                console.log('Loaded from Firebase Realtime Database:', docId, data);
+                                isLoadingRef.current = false;
+                                setLines(data.lines || []);
+                                setWaitlist(data.waitlist || []);
+                                setIsLocked(data.locked || false);
+                                return;
+                            } else {
+                                console.log('Document not found in Firebase:', docId);
+                            }
+                        } catch (error) {
+                            console.error('Firebase load error:', error);
+                            alert('Error loading from Firebase: ' + error.message);
                         }
-                    } catch (error) {
-                        console.error('Firebase load error:', error);
-                        alert('Error loading from Firebase: ' + error.message);
                     }
-                }
 
-                // Fallback to localStorage
-                const localData = storage.load(`staffing_${date}_${shift}`, null);
-                if (localData) {
-                    console.log('Loaded from localStorage:', localData);
-                    setLines(localData.lines || []);
-                    setWaitlist(localData.waitlist || []);
-                    setIsLocked(localData.locked || false);
-                } else {
-                    console.log('No data found');
-                    setLines([]);
-                    setWaitlist([]);
-                    setIsLocked(false);
+                    // Fallback to localStorage
+                    const localData = storage.load(`staffing_${date}_${shift}`, null);
+                    isLoadingRef.current = false;
+                    if (localData) {
+                        console.log('Loaded from localStorage:', localData);
+                        setLines(localData.lines || []);
+                        setWaitlist(localData.waitlist || []);
+                        setIsLocked(localData.locked || false);
+                    } else {
+                        console.log('No data found');
+                        setLines([]);
+                        setWaitlist([]);
+                        setIsLocked(false);
+                    }
+                } catch (error) {
+                    console.error('Unexpected load error:', error);
+                    isLoadingRef.current = false;
                 }
             };
 
@@ -3144,8 +3154,9 @@
 
                 localKeys.forEach(key => {
                     const data = storage.load(key);
+                    if (!data || !data.date || !data.shift) return;
                     const reportId = `${data.date}_${data.shift}`;
-                    if (data && !reportsList.find(r => r.id === reportId)) {
+                    if (!reportsList.find(r => r.id === reportId)) {
                         reportsList.push({ id: reportId, ...data, syncedToCloud: false });
                     }
                 });
@@ -3447,7 +3458,7 @@
                             {!searchDate && sortedMonthKeys.length > 0 && (
                                 <div>
                                     {sortedMonthKeys.map(monthKey => {
-                                        const isCollapsed = collapsedMonths[monthKey] !== false; // collapsed by default
+                                        const isCollapsed = collapsedMonths[monthKey] === true; // expanded by default
                                         const monthReports = monthGroups[monthKey];
                                         return (
                                             <div key={monthKey} style={{ marginBottom: '12px' }}>
