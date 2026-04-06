@@ -970,6 +970,41 @@
             font-size: 13px;
         }
 
+        .shift-assignment-banner {
+            display: flex;
+            align-items: center;
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #166534;
+        }
+
+        .shift-assignment-prompt {
+            display: flex;
+            align-items: center;
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .shift-mismatch-warning {
+            background: #fef2f2;
+            border: 1px solid #fca5a5;
+            border-left: 4px solid #ef4444;
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #7f1d1d;
+        }
+
         @media (max-width: 768px) {
             .staffing-layout {
                 flex-direction: column;
@@ -1133,6 +1168,7 @@
             const [isLocked, setIsLocked] = useState(false);
             const [undoStack, setUndoStack] = useState([]);
             const [undoMessage, setUndoMessage] = useState('');
+            const [supervisorShift, setSupervisorShift] = useState(() => storage.load('supervisorShift', ''));
             const saveTimeoutRef = useRef(null);
             const savingRef = useRef(false);
             const undoTimerRef = useRef(null);
@@ -1296,6 +1332,11 @@
                     console.error('Unexpected load error:', error);
                     isLoadingRef.current = false;
                 }
+            };
+
+            const handleSaveSupervisorShift = (shift) => {
+                setSupervisorShift(shift);
+                storage.save('supervisorShift', shift);
             };
 
             const handleSetupShift = (shiftData) => {
@@ -2023,6 +2064,8 @@
                                 coreAssociates={coreAssociates}
                                 initialDate={currentDate}
                                 initialShift={currentShift}
+                                supervisorShift={supervisorShift}
+                                onSaveSupervisorShift={handleSaveSupervisorShift}
                             />
                         )}
 
@@ -2843,12 +2886,14 @@
             );
         }
 
-        function SetupView({ onSetupShift, coreAssociates, initialDate, initialShift }) {
+        function SetupView({ onSetupShift, coreAssociates, initialDate, initialShift, supervisorShift, onSaveSupervisorShift }) {
             const [date, setDate] = useState(initialDate);
             const [shift, setShift] = useState(initialShift);
             const [lines, setLines] = useState([{ letter: '', leads: [], leadInput: '', needed: '' }]);
             const [showClone, setShowClone] = useState(false);
             const [cloneOptions, setCloneOptions] = useState([]);
+            const [editingSupervisorShift, setEditingSupervisorShift] = useState(false);
+            const [supervisorShiftDraft, setSupervisorShiftDraft] = useState(supervisorShift || '1st');
 
             const loadCloneOptions = async () => {
                 const options = [];
@@ -2904,6 +2949,23 @@
             const handleSubmit = async (e) => {
                 e.preventDefault();
 
+                // Warn if selected shift doesn't match the configured supervisor shift
+                if (supervisorShift && shift !== supervisorShift) {
+                    const confirmed = confirm(
+                        `WARNING: Shift mismatch!\n\n` +
+                        `Your assigned shift is: ${supervisorShift}\n` +
+                        `You are about to create a sheet for: ${shift} Shift\n\n` +
+                        `Creating a sheet for the wrong shift will overwrite that shift's data.\n\n` +
+                        `Are you sure you want to create a ${shift} Shift sheet?`
+                    );
+                    if (!confirmed) return;
+                    // Second confirmation to prevent accidental click-through
+                    const doubleConfirmed = confirm(
+                        `Please confirm again: you are intentionally creating a ${shift} Shift sheet (not your assigned ${supervisorShift} Shift).`
+                    );
+                    if (!doubleConfirmed) return;
+                }
+
                 // Check if staffing sheet already exists for this date/shift
                 const docId = `${date}_${shift}`;
                 let existsInFirebase = false;
@@ -2956,6 +3018,55 @@
                 <form onSubmit={handleSubmit} className="setup-form">
                     <div className="form-section">
                         <h3>Shift Information</h3>
+
+                        {/* My Shift assignment banner */}
+                        {!supervisorShift && !editingSupervisorShift ? (
+                            <div className="shift-assignment-prompt">
+                                <span>Tip: Set your assigned shift so you get a warning if you accidentally select the wrong one.</span>
+                                <button type="button" className="btn btn-secondary btn-small"
+                                    onClick={() => setEditingSupervisorShift(true)}
+                                    style={{ marginLeft: '10px', whiteSpace: 'nowrap' }}>
+                                    Set My Shift
+                                </button>
+                            </div>
+                        ) : editingSupervisorShift ? (
+                            <div className="shift-assignment-banner" style={{ background: '#eff6ff', borderColor: '#3b82f6' }}>
+                                <span style={{ fontWeight: '600', marginRight: '8px' }}>My Assigned Shift:</span>
+                                <select value={supervisorShiftDraft} onChange={(e) => setSupervisorShiftDraft(e.target.value)}
+                                    style={{ marginRight: '8px', padding: '2px 6px', borderRadius: '4px', border: '1px solid #d1d5db' }}>
+                                    <option>1st</option>
+                                    <option>2nd</option>
+                                    <option>Swing</option>
+                                </select>
+                                <button type="button" className="btn btn-secondary btn-small"
+                                    onClick={() => { onSaveSupervisorShift(supervisorShiftDraft); setEditingSupervisorShift(false); }}
+                                    style={{ background: '#10b981', color: 'white', border: 'none', marginRight: '6px' }}>
+                                    Save
+                                </button>
+                                <button type="button" className="btn btn-secondary btn-small"
+                                    onClick={() => setEditingSupervisorShift(false)}>
+                                    Cancel
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="shift-assignment-banner">
+                                <span>My Assigned Shift: <strong>{supervisorShift}</strong></span>
+                                <button type="button" className="btn btn-secondary btn-small"
+                                    onClick={() => { setSupervisorShiftDraft(supervisorShift); setEditingSupervisorShift(true); }}
+                                    style={{ marginLeft: '10px' }}>
+                                    Change
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Mismatch warning */}
+                        {supervisorShift && shift !== supervisorShift && (
+                            <div className="shift-mismatch-warning">
+                                <strong>Warning:</strong> You are configured as a <strong>{supervisorShift} Shift</strong> supervisor,
+                                but <strong>{shift} Shift</strong> is selected. Creating this sheet will modify {shift} Shift data.
+                            </div>
+                        )}
+
                         <div className="form-grid">
                             <div className="form-group">
                                 <label>Date *</label>
@@ -2968,7 +3079,8 @@
                             </div>
                             <div className="form-group">
                                 <label>Shift *</label>
-                                <select value={shift} onChange={(e) => setShift(e.target.value)} required>
+                                <select value={shift} onChange={(e) => setShift(e.target.value)} required
+                                    style={supervisorShift && shift !== supervisorShift ? { borderColor: '#ef4444', boxShadow: '0 0 0 2px rgba(239,68,68,0.2)' } : {}}>
                                     <option>1st</option>
                                     <option>2nd</option>
                                     <option>Swing</option>
