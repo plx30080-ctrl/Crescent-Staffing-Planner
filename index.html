@@ -1169,6 +1169,10 @@
             const [undoStack, setUndoStack] = useState([]);
             const [undoMessage, setUndoMessage] = useState('');
             const [supervisorShift, setSupervisorShift] = useState(() => storage.load('supervisorShift', ''));
+            const [showShiftModal, setShowShiftModal] = useState(() => !storage.load('supervisorShift', ''));
+            const [shiftModalDraft, setShiftModalDraft] = useState('1st');
+            const importInputRef = useRef(null);
+            const [importStatus, setImportStatus] = useState('');
             const saveTimeoutRef = useRef(null);
             const savingRef = useRef(false);
             const undoTimerRef = useRef(null);
@@ -1337,6 +1341,62 @@
             const handleSaveSupervisorShift = (shift) => {
                 setSupervisorShift(shift);
                 storage.save('supervisorShift', shift);
+            };
+
+            const handleImportClick = () => {
+                importInputRef.current?.click();
+            };
+
+            const handleImportFile = async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                e.target.value = '';
+
+                try {
+                    setImportStatus('Parsing...');
+                    const { date, shift, lines, waitlist } = await parseStaffingXLSX(file);
+                    const totalPeople = lines.reduce((sum, l) => sum + l.positions.length, 0);
+
+                    const confirmed = confirm(
+                        `Import: ${date} - ${shift} Shift\n` +
+                        `${lines.length} line${lines.length !== 1 ? 's' : ''}, ${totalPeople} people assigned` +
+                        (waitlist.length > 0 ? `, ${waitlist.length} on waitlist` : '') +
+                        `\n\nSave this to your reports?`
+                    );
+                    if (!confirmed) { setImportStatus(''); return; }
+
+                    const docId = `${date}_${shift}`;
+                    let alreadyExists = false;
+                    if (isFirebaseConfigured && db) {
+                        const snap = await db.ref('staffing/' + docId).once('value');
+                        alreadyExists = snap.exists();
+                    }
+                    if (!alreadyExists) {
+                        alreadyExists = storage.load(`staffing_${date}_${shift}`, null) !== null;
+                    }
+                    if (alreadyExists) {
+                        const overwrite = confirm(`A report for ${date} - ${shift} Shift already exists. Overwrite it?`);
+                        if (!overwrite) { setImportStatus(''); return; }
+                    }
+
+                    const staffingData = {
+                        date, shift, lines, waitlist,
+                        locked: false,
+                        lastUpdated: new Date().toISOString()
+                    };
+
+                    if (isFirebaseConfigured && db) {
+                        await db.ref('staffing/' + docId).set(staffingData);
+                    }
+                    storage.save(`staffing_${date}_${shift}`, staffingData);
+
+                    setImportStatus(`Imported ${date} - ${shift} ✓`);
+                    setTimeout(() => setImportStatus(''), 4000);
+                } catch (err) {
+                    console.error('Import error:', err);
+                    setImportStatus(`Error: ${err.message}`);
+                    setTimeout(() => setImportStatus(''), 6000);
+                }
             };
 
             const handleSetupShift = (shiftData) => {
@@ -2005,9 +2065,73 @@
 
             return (
                 <div className="container">
+                    {showShiftModal && (
+                        <div className="quick-add-modal">
+                            <div className="quick-add-content" style={{ maxWidth: '380px' }}>
+                                <div className="quick-add-header">
+                                    <span className="quick-add-title">Welcome — What shift do you manage?</span>
+                                </div>
+                                <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+                                    This helps warn you if you accidentally create a sheet for the wrong shift.
+                                </p>
+                                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                                    {['1st', '2nd', 'Swing'].map(s => (
+                                        <button
+                                            key={s}
+                                            type="button"
+                                            onClick={() => setShiftModalDraft(s)}
+                                            style={{
+                                                flex: 1,
+                                                padding: '12px 0',
+                                                borderRadius: '8px',
+                                                border: shiftModalDraft === s ? '2px solid #2563eb' : '2px solid #d1d5db',
+                                                background: shiftModalDraft === s ? '#eff6ff' : 'white',
+                                                color: shiftModalDraft === s ? '#2563eb' : '#374151',
+                                                fontWeight: shiftModalDraft === s ? '700' : '500',
+                                                fontSize: '14px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    style={{ width: '100%' }}
+                                    onClick={() => {
+                                        handleSaveSupervisorShift(shiftModalDraft);
+                                        setShowShiftModal(false);
+                                    }}
+                                >
+                                    Save My Shift
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     <div className="header">
                         <h1>Crescent Staffing Planner</h1>
                         <div className="header-actions">
+                            {importStatus && (
+                                <span style={{ fontSize: '12px', color: importStatus.startsWith('Error') ? '#ef4444' : '#10b981' }}>
+                                    {importStatus}
+                                </span>
+                            )}
+                            <button
+                                className="btn btn-secondary"
+                                onClick={handleImportClick}
+                                title="Upload a previously exported .xlsx staffing sheet"
+                            >
+                                Import XLSX
+                            </button>
+                            <input
+                                ref={importInputRef}
+                                type="file"
+                                accept=".xlsx"
+                                onChange={handleImportFile}
+                                style={{ display: 'none' }}
+                            />
                             {lines.length > 0 && (
                                 <>
                                     <button className="btn btn-secondary" onClick={() => window.print()}>
@@ -3325,9 +3449,6 @@
             const [showComparison, setShowComparison] = useState(false);
             const [compareIdA, setCompareIdA] = useState('');
             const [compareIdB, setCompareIdB] = useState('');
-            const importInputRef = useRef(null);
-            const [importStatus, setImportStatus] = useState('');
-
             useEffect(() => {
                 loadReports();
             }, []);
@@ -3396,63 +3517,6 @@
                 } catch (error) {
                     console.error('Error deleting report:', error);
                     alert('Error deleting report: ' + error.message);
-                }
-            };
-
-            const handleImportClick = () => {
-                importInputRef.current?.click();
-            };
-
-            const handleImportFile = async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                e.target.value = ''; // allow re-selecting the same file
-
-                try {
-                    setImportStatus('Parsing...');
-                    const { date, shift, lines, waitlist } = await parseStaffingXLSX(file);
-                    const totalPeople = lines.reduce((sum, l) => sum + l.positions.length, 0);
-
-                    const confirmed = confirm(
-                        `Import: ${date} - ${shift} Shift\n` +
-                        `${lines.length} line${lines.length !== 1 ? 's' : ''}, ${totalPeople} people assigned` +
-                        (waitlist.length > 0 ? `, ${waitlist.length} on waitlist` : '') +
-                        `\n\nSave this to your reports?`
-                    );
-                    if (!confirmed) { setImportStatus(''); return; }
-
-                    const docId = `${date}_${shift}`;
-                    let alreadyExists = false;
-                    if (isFirebaseConfigured && db) {
-                        const snap = await db.ref('staffing/' + docId).once('value');
-                        alreadyExists = snap.exists();
-                    }
-                    if (!alreadyExists) {
-                        alreadyExists = storage.load(`staffing_${date}_${shift}`, null) !== null;
-                    }
-                    if (alreadyExists) {
-                        const overwrite = confirm(`A report for ${date} - ${shift} Shift already exists. Overwrite it?`);
-                        if (!overwrite) { setImportStatus(''); return; }
-                    }
-
-                    const staffingData = {
-                        date, shift, lines, waitlist,
-                        locked: false,
-                        lastUpdated: new Date().toISOString()
-                    };
-
-                    if (isFirebaseConfigured && db) {
-                        await db.ref('staffing/' + docId).set(staffingData);
-                    }
-                    storage.save(`staffing_${date}_${shift}`, staffingData);
-
-                    setImportStatus(`Imported ${date} - ${shift} ✓`);
-                    setTimeout(() => setImportStatus(''), 4000);
-                    loadReports();
-                } catch (err) {
-                    console.error('Import error:', err);
-                    setImportStatus(`Error: ${err.message}`);
-                    setTimeout(() => setImportStatus(''), 6000);
                 }
             };
 
@@ -3594,19 +3658,6 @@
                                 {filteredReports.length} report{filteredReports.length !== 1 ? 's' : ''} found
                             </div>
                             <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                {importStatus && (
-                                    <span style={{ fontSize: '12px', color: importStatus.startsWith('Error') ? '#ef4444' : '#10b981' }}>
-                                        {importStatus}
-                                    </span>
-                                )}
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={handleImportClick}
-                                    style={{ fontSize: '12px', padding: '6px 14px' }}
-                                    title="Upload a previously exported .xlsx staffing sheet to restore it"
-                                >
-                                    Import XLSX
-                                </button>
                                 {reports.length >= 2 && (
                                     <button
                                         className={`btn ${showComparison ? 'btn-primary' : 'btn-secondary'}`}
@@ -3617,13 +3668,6 @@
                                     </button>
                                 )}
                             </div>
-                            <input
-                                ref={importInputRef}
-                                type="file"
-                                accept=".xlsx"
-                                onChange={handleImportFile}
-                                style={{ display: 'none' }}
-                            />
                         </div>
                     </div>
 
