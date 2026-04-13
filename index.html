@@ -642,6 +642,7 @@
         .flag-office { background: #e9d5ff; color: #6b21a8; }
         .flag-high { background: #d1fae5; color: #065f46; }
         .flag-low { background: #fee2e2; color: #991b1b; }
+        .flag-crescent { background: #fce7f3; color: #831843; font-weight: 700; }
 
         .flag-dropdown {
             position: relative;
@@ -773,6 +774,31 @@
 
         .position-slot.dragging {
             opacity: 0.4;
+        }
+
+        .position-slot.crescent-slot {
+            background: #fdf4ff;
+            border-color: #d946ef;
+            border-left: 3px solid #d946ef;
+        }
+
+        .position-slot.crescent-slot.filled {
+            background: #fce7f3;
+            border-color: #d946ef;
+            border-left: 3px solid #d946ef;
+        }
+
+        .crescent-divider {
+            font-size: 10px;
+            font-weight: 700;
+            color: #831843;
+            background: #fce7f3;
+            border: 1px solid #f9a8d4;
+            border-radius: 4px;
+            padding: 3px 8px;
+            margin: 6px 0 2px 0;
+            text-align: center;
+            letter-spacing: 0.5px;
         }
 
         .position-slot.drag-over {
@@ -1428,27 +1454,43 @@
                         allCoreAssociates.push(...coreList);
                     });
 
+                    // Separate Crescent-tagged associates from regular ones
+                    const regularAssociates = allCoreAssociates.filter(a => !(a.flags || []).includes('crescent'));
+                    const crescentAssociates = allCoreAssociates.filter(a => (a.flags || []).includes('crescent'));
+                    const needed = parseInt(line.needed);
+
                     return {
                         id: Date.now() + Math.random(),
                         letter: line.letter,
                         leads: leads,
-                        needed: parseInt(line.needed),
+                        needed: needed,
                         isCut: false,
-                        positions: Array(parseInt(line.needed)).fill(null).map((_, idx) => {
-                            // Pre-fill with core associates from all leads
-                            if (idx < allCoreAssociates.length) {
+                        positions: [
+                            // Regular positions (up to `needed` count)
+                            ...Array(needed).fill(null).map((_, idx) => {
+                                if (idx < regularAssociates.length) {
+                                    return {
+                                        id: Date.now() + Math.random() + idx,
+                                        name: regularAssociates[idx].name,
+                                        isNew: false,
+                                        isCrescent: false
+                                    };
+                                }
                                 return {
                                     id: Date.now() + Math.random() + idx,
-                                    name: allCoreAssociates[idx].name,
-                                    isNew: false
+                                    name: '',
+                                    isNew: false,
+                                    isCrescent: false
                                 };
-                            }
-                            return {
-                                id: Date.now() + Math.random() + idx,
-                                name: '',
-                                isNew: false
-                            };
-                        })
+                            }),
+                            // Crescent positions appended at the bottom (not counted in fill/total)
+                            ...crescentAssociates.map((assoc, idx) => ({
+                                id: Date.now() + Math.random() + needed + idx,
+                                name: assoc.name,
+                                isNew: false,
+                                isCrescent: true
+                            }))
+                        ]
                     };
                 });
 
@@ -1462,11 +1504,17 @@
                     if (line.id === lineId) {
                         return {
                             ...line,
-                            positions: line.positions.map(pos =>
-                                pos.id === positionId
-                                    ? { ...pos, name: name, isNew }
-                                    : pos
-                            )
+                            positions: line.positions.map(pos => {
+                                if (pos.id === positionId) {
+                                    // If this was a Crescent slot and the name is being cleared or changed,
+                                    // demote it to a regular open slot so it can be filled normally.
+                                    const isCrescent = pos.isCrescent && name.trim() === pos.name.trim() && name.trim() !== ''
+                                        ? true
+                                        : false;
+                                    return { ...pos, name, isNew, isCrescent };
+                                }
+                                return pos;
+                            })
                         };
                     }
                     return line;
@@ -1650,15 +1698,17 @@
                                 ...line,
                                 positions: line.positions.map(pos => {
                                     if (line.id === source.lineId && pos.id === source.positionId) {
-                                        // Replace source with target
+                                        // Replace source with target's content
                                         const targetLine = prev.find(l => l.id === target.lineId);
                                         const targetPos = targetLine?.positions.find(p => p.id === target.positionId);
-                                        return targetPos ? { ...pos, name: targetPos.name, isNew: targetPos.isNew } : pos;
+                                        // Clear isCrescent since the person occupying this slot is changing
+                                        return targetPos ? { ...pos, name: targetPos.name, isNew: targetPos.isNew, isCrescent: false } : pos;
                                     } else if (line.id === target.lineId && pos.id === target.positionId) {
-                                        // Replace target with source
+                                        // Replace target with source's content
                                         const sourceLine = prev.find(l => l.id === source.lineId);
                                         const sourcePos = sourceLine?.positions.find(p => p.id === source.positionId);
-                                        return sourcePos ? { ...pos, name: sourcePos.name, isNew: sourcePos.isNew } : pos;
+                                        // Clear isCrescent since the person occupying this slot is changing
+                                        return sourcePos ? { ...pos, name: sourcePos.name, isNew: sourcePos.isNew, isCrescent: false } : pos;
                                     }
                                     return pos;
                                 })
@@ -1701,8 +1751,10 @@
                     const currentLine = lines.find(l => l.id === lineId);
                     if (currentLine) {
                         const newNeeded = parseInt(updates.needed) || 0;
-                        if (newNeeded < currentLine.positions.length) {
-                            const wouldLose = currentLine.positions.slice(newNeeded).filter(p => p.name.trim());
+                        // Only check non-Crescent positions for truncation
+                        const regularPositions = currentLine.positions.filter(p => !p.isCrescent);
+                        if (newNeeded < regularPositions.length) {
+                            const wouldLose = regularPositions.slice(newNeeded).filter(p => p.name.trim());
                             if (wouldLose.length > 0) {
                                 const names = wouldLose.map(p => p.name).join(', ');
                                 if (!confirm(`Reducing positions will remove: ${names}\n\nContinue?`)) {
@@ -1721,20 +1773,27 @@
                             return updatedLine;
                         }
 
-                        if (updates.needed !== undefined && updates.needed !== line.positions.length) {
+                        if (updates.needed !== undefined) {
                             const newNeeded = parseInt(updates.needed) || 0;
-                            if (newNeeded > line.positions.length) {
-                                const additionalPositions = Array(newNeeded - line.positions.length)
+                            const regularPositions = line.positions.filter(p => !p.isCrescent);
+                            const crescentPositions = line.positions.filter(p => p.isCrescent);
+
+                            let newRegular;
+                            if (newNeeded > regularPositions.length) {
+                                const additionalPositions = Array(newNeeded - regularPositions.length)
                                     .fill(null)
                                     .map((_, idx) => ({
                                         id: Date.now() + Math.random() + idx,
                                         name: '',
-                                        isNew: false
+                                        isNew: false,
+                                        isCrescent: false
                                     }));
-                                updatedLine.positions = [...line.positions, ...additionalPositions];
+                                newRegular = [...regularPositions, ...additionalPositions];
                             } else {
-                                updatedLine.positions = line.positions.slice(0, newNeeded);
+                                newRegular = regularPositions.slice(0, newNeeded);
                             }
+                            // Crescent positions are always preserved at the end
+                            updatedLine.positions = [...newRegular, ...crescentPositions];
                         }
 
                         return updatedLine;
@@ -1817,15 +1876,15 @@
                 // Create workbook
                 const wb = XLSX.utils.book_new();
 
-                // Calculate stats
+                // Calculate stats (excluding Crescent positions)
                 const activeLines = lines.filter(line => !line.isCut);
                 const cutLines = lines.filter(line => line.isCut);
                 const totalPositions = activeLines.reduce((sum, line) => sum + line.needed, 0);
                 const filledPositions = activeLines.reduce((sum, line) =>
-                    sum + line.positions.filter(p => p.name.trim()).length, 0
+                    sum + line.positions.filter(p => p.name.trim() && !p.isCrescent).length, 0
                 );
                 const newAssociates = activeLines.reduce((sum, line) =>
-                    sum + line.positions.filter(p => p.name.trim() && p.isNew).length, 0
+                    sum + line.positions.filter(p => p.name.trim() && p.isNew && !p.isCrescent).length, 0
                 );
 
                 // Build data in column-based layout (like the tool)
@@ -1843,8 +1902,11 @@
                 // Empty row
                 data.push([]);
 
-                // Find max positions needed for any line
-                const maxPositions = Math.max(...lines.map(l => l.positions.length), waitlist.length);
+                // Find max positions needed for any line (excluding Crescent positions)
+                const maxPositions = Math.max(
+                    ...lines.map(l => l.positions.filter(p => !p.isCrescent).length),
+                    waitlist.length
+                );
 
                 // Header row - Line letters and waitlist
                 const headerRow = [];
@@ -1865,11 +1927,12 @@
                 subheaderRow.push('');
                 data.push(subheaderRow);
 
-                // Position rows
+                // Position rows (Crescent positions are excluded from export)
                 for (let i = 0; i < maxPositions; i++) {
                     const row = [];
                     lines.forEach(line => {
-                        const position = line.positions[i];
+                        const nonCrescentPositions = line.positions.filter(p => !p.isCrescent);
+                        const position = nonCrescentPositions[i];
                         if (position) {
                             const name = position.name || '';
                             const marker = position.isNew ? ' ⭐' : '';
@@ -2338,15 +2401,15 @@
                 );
             }
 
-            // Calculate stats excluding cut lines
+            // Calculate stats excluding cut lines and Crescent positions
             const activeLines = lines.filter(line => !line.isCut);
             const cutLines = lines.filter(line => line.isCut);
             const totalPositions = activeLines.reduce((sum, line) => sum + line.needed, 0);
             const filledPositions = activeLines.reduce((sum, line) =>
-                sum + line.positions.filter(p => p.name.trim()).length, 0
+                sum + line.positions.filter(p => p.name.trim() && !p.isCrescent).length, 0
             );
             const newAssociates = activeLines.reduce((sum, line) =>
-                sum + line.positions.filter(p => p.name.trim() && p.isNew).length, 0
+                sum + line.positions.filter(p => p.name.trim() && p.isNew && !p.isCrescent).length, 0
             );
 
             // Duplicate person detection (bug #5)
@@ -2736,7 +2799,8 @@
             const [editLeads, setEditLeads] = useState((line.leads || []).join(', '));
             const [editNeeded, setEditNeeded] = useState(line.needed);
 
-            const filledCount = line.positions.filter(p => p.name.trim()).length;
+            const filledCount = line.positions.filter(p => p.name.trim() && !p.isCrescent).length;
+            const crescentCount = line.positions.filter(p => p.isCrescent && p.name.trim()).length;
             const leads = line.leads || (line.lead ? [line.lead] : []);
 
             const handleSaveEdit = () => {
@@ -2748,8 +2812,9 @@
                 const addedLeads = newLeadsArray.filter(l => !oldLeadsArray.includes(l));
                 const removedLeads = oldLeadsArray.filter(l => !newLeadsArray.includes(l));
 
-                // Collect core members to add from new leads
+                // Collect core members to add from new leads (split into regular and Crescent)
                 const coreToAdd = [];
+                const crescentToAdd = [];
                 const ca = coreAssociates || {};
                 addedLeads.forEach(lead => {
                     let members = ca[lead];
@@ -2760,7 +2825,11 @@
                     members.forEach(m => {
                         // Don't add if already on this line
                         if (!line.positions.some(p => p.name.trim().toLowerCase() === m.name.trim().toLowerCase())) {
-                            coreToAdd.push(m.name);
+                            if ((m.flags || []).includes('crescent')) {
+                                crescentToAdd.push(m.name);
+                            } else {
+                                coreToAdd.push(m.name);
+                            }
                         }
                     });
                 });
@@ -2790,54 +2859,63 @@
                     if (shouldRemove) {
                         updatedPositions = updatedPositions.map(p => {
                             if (coreToRemove.includes(p.name.trim().toLowerCase())) {
-                                return { ...p, name: '', isNew: false };
+                                return { ...p, name: '', isNew: false, isCrescent: false };
                             }
                             return p;
                         });
                     }
                 }
 
-                // Handle added leads' core members - fill empty slots
+                // Separate regular and Crescent positions for independent management
+                let regularPositions = updatedPositions.filter(p => !p.isCrescent);
+                let crescentPositions = updatedPositions.filter(p => p.isCrescent);
+
+                // Handle added leads' regular core members - fill empty regular slots
                 if (coreToAdd.length > 0) {
                     let addIndex = 0;
-                    // First pass: adjust positions count if needed
                     let totalNeeded = newNeeded;
-                    const currentFilled = updatedPositions.filter(p => p.name.trim()).length;
-                    const emptySlots = updatedPositions.filter(p => !p.name.trim()).length;
+                    const currentFilled = regularPositions.filter(p => p.name.trim()).length;
+                    const emptySlots = regularPositions.filter(p => !p.name.trim()).length;
 
                     if (coreToAdd.length > emptySlots) {
-                        // Need more positions
                         totalNeeded = Math.max(newNeeded, currentFilled + coreToAdd.length);
                     }
 
-                    // Fill empty positions with core members
-                    updatedPositions = updatedPositions.map(p => {
+                    regularPositions = regularPositions.map(p => {
                         if (!p.name.trim() && addIndex < coreToAdd.length) {
                             const name = coreToAdd[addIndex];
                             addIndex++;
-                            return { ...p, name: name, isNew: false };
+                            return { ...p, name, isNew: false, isCrescent: false };
                         }
                         return p;
                     });
 
-                    // If we still have members to add, create new positions
                     while (addIndex < coreToAdd.length) {
-                        updatedPositions.push({
+                        regularPositions.push({
                             id: Date.now() + Math.random() + addIndex,
                             name: coreToAdd[addIndex],
-                            isNew: false
+                            isNew: false,
+                            isCrescent: false
                         });
                         addIndex++;
-                        totalNeeded = Math.max(totalNeeded, updatedPositions.length);
+                        totalNeeded = Math.max(totalNeeded, regularPositions.length);
                     }
 
-                    // Update needed count if we added positions
                     if (totalNeeded > newNeeded) {
+                        // Append any new Crescent members from added leads
+                        crescentToAdd.forEach((name, idx) => {
+                            crescentPositions.push({
+                                id: Date.now() + Math.random() + idx + 9000,
+                                name,
+                                isNew: false,
+                                isCrescent: true
+                            });
+                        });
                         onUpdateLine(line.id, {
                             letter: editLetter,
                             leads: newLeadsArray,
                             needed: totalNeeded,
-                            positions: updatedPositions
+                            positions: [...regularPositions, ...crescentPositions]
                         });
                         setEditNeeded(totalNeeded);
                         setIsEditing(false);
@@ -2845,18 +2923,29 @@
                     }
                 }
 
-                // Adjust positions array for needed count changes
-                if (newNeeded > updatedPositions.length) {
-                    const additionalPositions = Array(newNeeded - updatedPositions.length)
+                // Append new Crescent members from added leads
+                crescentToAdd.forEach((name, idx) => {
+                    crescentPositions.push({
+                        id: Date.now() + Math.random() + idx + 9000,
+                        name,
+                        isNew: false,
+                        isCrescent: true
+                    });
+                });
+
+                // Adjust regular positions array for needed count changes
+                if (newNeeded > regularPositions.length) {
+                    const additionalPositions = Array(newNeeded - regularPositions.length)
                         .fill(null)
                         .map((_, idx) => ({
                             id: Date.now() + Math.random() + idx,
                             name: '',
-                            isNew: false
+                            isNew: false,
+                            isCrescent: false
                         }));
-                    updatedPositions = [...updatedPositions, ...additionalPositions];
-                } else if (newNeeded < updatedPositions.length) {
-                    const wouldLose = updatedPositions.slice(newNeeded).filter(p => p.name.trim());
+                    regularPositions = [...regularPositions, ...additionalPositions];
+                } else if (newNeeded < regularPositions.length) {
+                    const wouldLose = regularPositions.slice(newNeeded).filter(p => p.name.trim());
                     if (wouldLose.length > 0) {
                         const names = wouldLose.map(p => p.name).join(', ');
                         if (!confirm(`Reducing positions will remove: ${names}\n\nContinue?`)) {
@@ -2864,14 +2953,14 @@
                             return;
                         }
                     }
-                    updatedPositions = updatedPositions.slice(0, newNeeded);
+                    regularPositions = regularPositions.slice(0, newNeeded);
                 }
 
                 onUpdateLine(line.id, {
                     letter: editLetter,
                     leads: newLeadsArray,
                     needed: newNeeded,
-                    positions: updatedPositions
+                    positions: [...regularPositions, ...crescentPositions]
                 });
                 setIsEditing(false);
             };
@@ -2893,7 +2982,10 @@
                                 <div className="line-lead">
                                     {leads.length > 0 ? leads.join(', ') : 'No lead'}
                                 </div>
-                                <div className="line-stats">{filledCount} / {line.needed} filled</div>
+                                <div className="line-stats">
+                                    {filledCount} / {line.needed} filled
+                                    {crescentCount > 0 && <span style={{ color: '#831843', marginLeft: '4px' }}>+{crescentCount}C</span>}
+                                </div>
                                 <div className="line-edit-controls">
                                     <button
                                         className="btn btn-secondary btn-small"
@@ -2967,44 +3059,60 @@
                         )}
                     </div>
                     <div className="positions-list">
-                        {line.positions.map((position, index) => (
-                            <div
-                                key={position.id}
-                                className={`position-slot ${position.name.trim() ? 'filled' : ''} ${position.isNew ? 'new-associate' : ''}`}
-                                draggable={!isLocked && !selectMode && position.name.trim() !== '' && !line.isCut}
-                                onDragStart={(e) => (isLocked || selectMode) ? e.preventDefault() : onDragStart(e, { type: 'position', lineId: line.id, positionId: position.id })}
-                                onDragOver={selectMode ? null : onDragOver}
-                                onDrop={(e) => (isLocked || selectMode) ? e.preventDefault() : onDrop(e, { type: 'position', lineId: line.id, positionId: position.id })}
-                                style={{ cursor: isLocked ? 'not-allowed' : selectMode ? 'pointer' : (position.name.trim() && !line.isCut ? 'grab' : 'default'), position: 'relative' }}
-                                onClick={selectMode && position.name.trim() ? () => onTogglePositionSelect(line.id, position.id) : undefined}
-                            >
-                                {selectMode && position.name.trim() && (
-                                    <input type="checkbox" className="bulk-checkbox"
-                                        checked={!!(selectedPositions || []).find(s => s.lineId === line.id && s.positionId === position.id)}
-                                        onChange={() => onTogglePositionSelect(line.id, position.id)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        style={{ width: '14px', height: '14px' }}
-                                    />
-                                )}
-                                <div className="position-number">{index + 1}</div>
-                                <input
-                                    type="text"
-                                    className="position-input"
-                                    value={position.name}
-                                    onChange={(e) => onUpdatePosition(line.id, position.id, e.target.value, position.isNew)}
-                                    placeholder="Name..."
-                                    disabled={line.isCut || isLocked}
-                                />
-                                <div className="position-checkbox">
-                                    <input
-                                        type="checkbox"
-                                        checked={position.isNew}
-                                        onChange={(e) => onUpdatePosition(line.id, position.id, position.name, e.target.checked)}
-                                        disabled={line.isCut || isLocked}
-                                    />
-                                </div>
-                            </div>
-                        ))}
+                        {line.positions.map((position, index) => {
+                            // Determine if this is the first Crescent position (for divider)
+                            const isFirstCrescent = position.isCrescent &&
+                                (index === 0 || !line.positions[index - 1].isCrescent);
+                            // Numbering: Crescent positions show C1, C2, etc.
+                            const crescentIndex = position.isCrescent
+                                ? line.positions.slice(0, index).filter(p => p.isCrescent).length + 1
+                                : null;
+
+                            return (
+                                <React.Fragment key={position.id}>
+                                    {isFirstCrescent && (
+                                        <div className="crescent-divider">Crescent Staff</div>
+                                    )}
+                                    <div
+                                        className={`position-slot ${position.name.trim() ? 'filled' : ''} ${position.isNew ? 'new-associate' : ''} ${position.isCrescent ? 'crescent-slot' : ''}`}
+                                        draggable={!isLocked && !selectMode && position.name.trim() !== '' && !line.isCut}
+                                        onDragStart={(e) => (isLocked || selectMode) ? e.preventDefault() : onDragStart(e, { type: 'position', lineId: line.id, positionId: position.id })}
+                                        onDragOver={selectMode ? null : onDragOver}
+                                        onDrop={(e) => (isLocked || selectMode) ? e.preventDefault() : onDrop(e, { type: 'position', lineId: line.id, positionId: position.id })}
+                                        style={{ cursor: isLocked ? 'not-allowed' : selectMode ? 'pointer' : (position.name.trim() && !line.isCut ? 'grab' : 'default'), position: 'relative' }}
+                                        onClick={selectMode && position.name.trim() ? () => onTogglePositionSelect(line.id, position.id) : undefined}
+                                    >
+                                        {selectMode && position.name.trim() && (
+                                            <input type="checkbox" className="bulk-checkbox"
+                                                checked={!!(selectedPositions || []).find(s => s.lineId === line.id && s.positionId === position.id)}
+                                                onChange={() => onTogglePositionSelect(line.id, position.id)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                style={{ width: '14px', height: '14px' }}
+                                            />
+                                        )}
+                                        <div className="position-number" style={position.isCrescent ? { color: '#831843' } : {}}>
+                                            {position.isCrescent ? `C${crescentIndex}` : index + 1}
+                                        </div>
+                                        <input
+                                            type="text"
+                                            className="position-input"
+                                            value={position.name}
+                                            onChange={(e) => onUpdatePosition(line.id, position.id, e.target.value, position.isNew)}
+                                            placeholder="Name..."
+                                            disabled={line.isCut || isLocked}
+                                        />
+                                        <div className="position-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                checked={position.isNew}
+                                                onChange={(e) => onUpdatePosition(line.id, position.id, position.name, e.target.checked)}
+                                                disabled={line.isCut || isLocked}
+                                            />
+                                        </div>
+                                    </div>
+                                </React.Fragment>
+                            );
+                        })}
                     </div>
                 </div>
             );
@@ -3841,7 +3949,8 @@
             { id: 'sanitation', label: 'Sanitation', className: 'flag-sanitation' },
             { id: 'office', label: 'Office Support', className: 'flag-office' },
             { id: 'high', label: 'High Performer', className: 'flag-high' },
-            { id: 'low', label: 'Low Performer', className: 'flag-low' }
+            { id: 'low', label: 'Low Performer', className: 'flag-low' },
+            { id: 'crescent', label: 'Crescent', className: 'flag-crescent' }
         ];
 
         function FlagsDropdown({ flags = [], onChange, inForm = false }) {
