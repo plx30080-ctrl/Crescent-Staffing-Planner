@@ -4053,6 +4053,10 @@
             const [isEditingLead, setIsEditingLead] = useState(false);
             const [editLeadName, setEditLeadName] = useState('');
             const [editLeadNotes, setEditLeadNotes] = useState('');
+            // Inline associate editing
+            const [editingKey, setEditingKey] = useState(null); // { lead, index }
+            const [editAssocName, setEditAssocName] = useState('');
+            const [editAssocFlags, setEditAssocFlags] = useState([]);
 
             const allLeads = Object.keys(coreAssociates);
 
@@ -4143,6 +4147,29 @@
                 setIsEditingLead(false);
                 setEditLeadName('');
                 setEditLeadNotes('');
+            };
+
+            const handleStartEditAssociate = (lead, index, associate) => {
+                setEditingKey({ lead, index });
+                setEditAssocName(associate.name);
+                setEditAssocFlags(associate.flags || []);
+            };
+
+            const handleSaveEditAssociate = () => {
+                if (!editingKey || !editAssocName.trim()) return;
+                onUpdateCoreAssociate(editingKey.lead, editingKey.index, {
+                    name: editAssocName.trim(),
+                    flags: editAssocFlags
+                });
+                setEditingKey(null);
+                setEditAssocName('');
+                setEditAssocFlags([]);
+            };
+
+            const handleCancelEditAssociate = () => {
+                setEditingKey(null);
+                setEditAssocName('');
+                setEditAssocFlags([]);
             };
 
             const filteredAssociates = getFilteredAssociates();
@@ -4353,38 +4380,65 @@
                                         </p>
                                     ) : (
                                         filteredAssociates.map((associate, idx) => {
-                                            const originalIndex = (coreAssociates[selectedLead || newLead] || []).findIndex(a => a.name === associate.name);
+                                            const lead = selectedLead || newLead;
+                                            const originalIndex = (coreAssociates[lead] || []).findIndex(a => a.name === associate.name);
+                                            const isEditing = editingKey && editingKey.lead === lead && editingKey.index === originalIndex;
                                             return (
-                                                <div key={idx} className="core-associate-item">
-                                                    <div className="core-associate-info">
-                                                        <div className="core-associate-name">{associate.name}</div>
-                                                        <div className="core-associate-flags">
-                                                            {associate.flags && associate.flags.length > 0 ? (
-                                                                associate.flags.map(flagId => {
-                                                                    const flag = AVAILABLE_FLAGS.find(f => f.id === flagId);
-                                                                    return flag ? (
-                                                                        <span key={flagId} className={`flag-badge ${flag.className}`}>
-                                                                            {flag.label}
-                                                                        </span>
-                                                                    ) : null;
-                                                                })
-                                                            ) : (
-                                                                <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>No flags</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
-                                                        <FlagsDropdown
-                                                            flags={associate.flags || []}
-                                                            onChange={(newFlags) => handleUpdateAssociateFlags(selectedLead || newLead, originalIndex, newFlags)}
-                                                        />
-                                                        <button
-                                                            className="btn btn-danger btn-small"
-                                                            onClick={() => onRemoveCoreAssociate(selectedLead || newLead, originalIndex)}
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </div>
+                                                <div key={idx} className="core-associate-item" style={isEditing ? { flexDirection: 'column', alignItems: 'stretch', gap: '8px', background: '#f0f7ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '10px' } : {}}>
+                                                    {isEditing ? (
+                                                        <>
+                                                            <div style={{ fontSize: '11px', fontWeight: '600', color: '#1e40af', marginBottom: '4px' }}>Editing: {associate.name}</div>
+                                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                <input
+                                                                    type="text"
+                                                                    value={editAssocName}
+                                                                    onChange={(e) => setEditAssocName(e.target.value)}
+                                                                    placeholder="Name"
+                                                                    style={{ flex: 1, minWidth: '120px', padding: '6px 10px', border: '1px solid #93c5fd', borderRadius: '4px', fontSize: '13px' }}
+                                                                    autoFocus
+                                                                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEditAssociate(); if (e.key === 'Escape') handleCancelEditAssociate(); }}
+                                                                />
+                                                                <FlagsDropdown flags={editAssocFlags} onChange={setEditAssocFlags} inForm={true} />
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                                                <button className="btn btn-success btn-small" onClick={handleSaveEditAssociate}>Save</button>
+                                                                <button className="btn btn-secondary btn-small" onClick={handleCancelEditAssociate}>Cancel</button>
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <div className="core-associate-info">
+                                                                <div className="core-associate-name">{associate.name}</div>
+                                                                <div className="core-associate-flags">
+                                                                    {associate.flags && associate.flags.length > 0 ? (
+                                                                        associate.flags.map(flagId => {
+                                                                            const flag = AVAILABLE_FLAGS.find(f => f.id === flagId);
+                                                                            return flag ? (
+                                                                                <span key={flagId} className={`flag-badge ${flag.className}`}>{flag.label}</span>
+                                                                            ) : null;
+                                                                        })
+                                                                    ) : (
+                                                                        <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>No flags</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
+                                                                <button
+                                                                    className="btn btn-primary btn-small"
+                                                                    onClick={() => handleStartEditAssociate(lead, originalIndex, associate)}
+                                                                    style={{ fontSize: '11px' }}
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    className="btn btn-danger btn-small"
+                                                                    onClick={() => onRemoveCoreAssociate(lead, originalIndex)}
+                                                                >
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </div>
                                             );
                                         })
@@ -4424,39 +4478,67 @@
                                                     </div>
                                                 )}
                                                 <div className="core-associates-list">
-                                                    {leadAssociates.map((associate, idx) => (
-                                                        <div key={idx} className="core-associate-item">
-                                                            <div className="core-associate-info">
-                                                                <div className="core-associate-name">{associate.name}</div>
-                                                                <div className="core-associate-flags">
-                                                                    {associate.flags && associate.flags.length > 0 ? (
-                                                                        associate.flags.map(flagId => {
-                                                                            const flag = AVAILABLE_FLAGS.find(f => f.id === flagId);
-                                                                            return flag ? (
-                                                                                <span key={flagId} className={`flag-badge ${flag.className}`}>
-                                                                                    {flag.label}
-                                                                                </span>
-                                                                            ) : null;
-                                                                        })
-                                                                    ) : (
-                                                                        <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>No flags</span>
-                                                                    )}
-                                                                </div>
+                                                    {leadAssociates.map((associate, idx) => {
+                                                        const isEditing = editingKey && editingKey.lead === associate.lead && editingKey.index === associate.leadIndex;
+                                                        return (
+                                                            <div key={idx} className="core-associate-item" style={isEditing ? { flexDirection: 'column', alignItems: 'stretch', gap: '8px', background: '#f0f7ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '10px' } : {}}>
+                                                                {isEditing ? (
+                                                                    <>
+                                                                        <div style={{ fontSize: '11px', fontWeight: '600', color: '#1e40af', marginBottom: '4px' }}>Editing: {associate.name}</div>
+                                                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                            <input
+                                                                                type="text"
+                                                                                value={editAssocName}
+                                                                                onChange={(e) => setEditAssocName(e.target.value)}
+                                                                                placeholder="Name"
+                                                                                style={{ flex: 1, minWidth: '120px', padding: '6px 10px', border: '1px solid #93c5fd', borderRadius: '4px', fontSize: '13px' }}
+                                                                                autoFocus
+                                                                                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEditAssociate(); if (e.key === 'Escape') handleCancelEditAssociate(); }}
+                                                                            />
+                                                                            <FlagsDropdown flags={editAssocFlags} onChange={setEditAssocFlags} inForm={true} />
+                                                                        </div>
+                                                                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                                                            <button className="btn btn-success btn-small" onClick={handleSaveEditAssociate}>Save</button>
+                                                                            <button className="btn btn-secondary btn-small" onClick={handleCancelEditAssociate}>Cancel</button>
+                                                                        </div>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <div className="core-associate-info">
+                                                                            <div className="core-associate-name">{associate.name}</div>
+                                                                            <div className="core-associate-flags">
+                                                                                {associate.flags && associate.flags.length > 0 ? (
+                                                                                    associate.flags.map(flagId => {
+                                                                                        const flag = AVAILABLE_FLAGS.find(f => f.id === flagId);
+                                                                                        return flag ? (
+                                                                                            <span key={flagId} className={`flag-badge ${flag.className}`}>{flag.label}</span>
+                                                                                        ) : null;
+                                                                                    })
+                                                                                ) : (
+                                                                                    <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>No flags</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
+                                                                            <button
+                                                                                className="btn btn-primary btn-small"
+                                                                                onClick={() => handleStartEditAssociate(associate.lead, associate.leadIndex, associate)}
+                                                                                style={{ fontSize: '11px' }}
+                                                                            >
+                                                                                Edit
+                                                                            </button>
+                                                                            <button
+                                                                                className="btn btn-danger btn-small"
+                                                                                onClick={() => onRemoveCoreAssociate(associate.lead, associate.leadIndex)}
+                                                                            >
+                                                                                Remove
+                                                                            </button>
+                                                                        </div>
+                                                                    </>
+                                                                )}
                                                             </div>
-                                                            <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
-                                                                <FlagsDropdown
-                                                                    flags={associate.flags || []}
-                                                                    onChange={(newFlags) => handleUpdateAssociateFlags(associate.lead, associate.leadIndex, newFlags)}
-                                                                />
-                                                                <button
-                                                                    className="btn btn-danger btn-small"
-                                                                    onClick={() => onRemoveCoreAssociate(associate.lead, associate.leadIndex)}
-                                                                >
-                                                                    Remove
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         );
