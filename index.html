@@ -1457,7 +1457,8 @@
                     // Separate Crescent-tagged associates from regular ones
                     const regularAssociates = allCoreAssociates.filter(a => !(a.flags || []).includes('crescent'));
                     const crescentAssociates = allCoreAssociates.filter(a => (a.flags || []).includes('crescent'));
-                    const needed = parseInt(line.needed);
+                    // Deduct crescent count from the requested number — crescent fill some of the needed slots
+                    const needed = Math.max(0, parseInt(line.needed) - crescentAssociates.length);
 
                     return {
                         id: Date.now() + Math.random(),
@@ -2852,11 +2853,16 @@
 
                 // Handle removed leads' core members
                 let updatedPositions = [...line.positions];
+                let crescentRemovedCount = 0;
                 if (coreToRemove.length > 0) {
                     const shouldRemove = confirm(
                         `The following core members belong to removed lead(s):\n${coreToRemove.map(n => '  - ' + n).join('\n')}\n\nRemove them from this line?`
                     );
                     if (shouldRemove) {
+                        // Count crescent being removed so we can add them back to the needed total
+                        crescentRemovedCount = line.positions.filter(p =>
+                            p.isCrescent && p.name.trim() && coreToRemove.includes(p.name.trim().toLowerCase())
+                        ).length;
                         updatedPositions = updatedPositions.map(p => {
                             if (coreToRemove.includes(p.name.trim().toLowerCase())) {
                                 return { ...p, name: '', isNew: false, isCrescent: false };
@@ -2870,15 +2876,18 @@
                 let regularPositions = updatedPositions.filter(p => !p.isCrescent);
                 let crescentPositions = updatedPositions.filter(p => p.isCrescent);
 
+                // Deduct newly-added crescent from the needed count (and restore for any removed crescent)
+                const adjustedNeeded = Math.max(0, newNeeded - crescentToAdd.length + crescentRemovedCount);
+
                 // Handle added leads' regular core members - fill empty regular slots
                 if (coreToAdd.length > 0) {
                     let addIndex = 0;
-                    let totalNeeded = newNeeded;
+                    let totalNeeded = adjustedNeeded;
                     const currentFilled = regularPositions.filter(p => p.name.trim()).length;
                     const emptySlots = regularPositions.filter(p => !p.name.trim()).length;
 
                     if (coreToAdd.length > emptySlots) {
-                        totalNeeded = Math.max(newNeeded, currentFilled + coreToAdd.length);
+                        totalNeeded = Math.max(adjustedNeeded, currentFilled + coreToAdd.length);
                     }
 
                     regularPositions = regularPositions.map(p => {
@@ -2901,7 +2910,7 @@
                         totalNeeded = Math.max(totalNeeded, regularPositions.length);
                     }
 
-                    if (totalNeeded > newNeeded) {
+                    if (totalNeeded > adjustedNeeded) {
                         // Append any new Crescent members from added leads
                         crescentToAdd.forEach((name, idx) => {
                             crescentPositions.push({
@@ -2934,8 +2943,8 @@
                 });
 
                 // Adjust regular positions array for needed count changes
-                if (newNeeded > regularPositions.length) {
-                    const additionalPositions = Array(newNeeded - regularPositions.length)
+                if (adjustedNeeded > regularPositions.length) {
+                    const additionalPositions = Array(adjustedNeeded - regularPositions.length)
                         .fill(null)
                         .map((_, idx) => ({
                             id: Date.now() + Math.random() + idx,
@@ -2944,8 +2953,8 @@
                             isCrescent: false
                         }));
                     regularPositions = [...regularPositions, ...additionalPositions];
-                } else if (newNeeded < regularPositions.length) {
-                    const wouldLose = regularPositions.slice(newNeeded).filter(p => p.name.trim());
+                } else if (adjustedNeeded < regularPositions.length) {
+                    const wouldLose = regularPositions.slice(adjustedNeeded).filter(p => p.name.trim());
                     if (wouldLose.length > 0) {
                         const names = wouldLose.map(p => p.name).join(', ');
                         if (!confirm(`Reducing positions will remove: ${names}\n\nContinue?`)) {
@@ -2953,15 +2962,16 @@
                             return;
                         }
                     }
-                    regularPositions = regularPositions.slice(0, newNeeded);
+                    regularPositions = regularPositions.slice(0, adjustedNeeded);
                 }
 
                 onUpdateLine(line.id, {
                     letter: editLetter,
                     leads: newLeadsArray,
-                    needed: newNeeded,
+                    needed: adjustedNeeded,
                     positions: [...regularPositions, ...crescentPositions]
                 });
+                setEditNeeded(adjustedNeeded);
                 setIsEditing(false);
             };
 
