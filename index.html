@@ -351,7 +351,8 @@
         }
 
         .position-input {
-            flex: 1;
+            width: 100%;
+            box-sizing: border-box;
             padding: 5px 6px;
             border: 1px solid #d1d5db;
             border-radius: 3px;
@@ -1128,6 +1129,65 @@
         .comparison-name.same { background: #f3f4f6; color: #374151; }
         .comparison-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
         .comparison-stat { text-align: center; padding: 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+
+        /* Autocomplete */
+        .autocomplete-wrapper { position: relative; flex: 1; min-width: 0; }
+        .autocomplete-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: white; border: 1px solid #c7d2fe;
+            border-radius: 4px; box-shadow: 0 4px 16px rgba(102,126,234,0.18);
+            z-index: 1000; max-height: 220px; overflow-y: auto;
+        }
+        .autocomplete-item {
+            padding: 6px 10px; font-size: 12px; cursor: pointer;
+            border-bottom: 1px solid #f3f4f6; color: #374151;
+        }
+        .autocomplete-item:last-child { border-bottom: none; }
+        .autocomplete-item:hover, .autocomplete-item.highlighted {
+            background: #eff6ff; color: #1d4ed8;
+        }
+
+        /* Badge Scan */
+        .scan-result-box {
+            padding: 12px 16px; border-radius: 6px; margin: 12px 0; font-size: 13px; line-height: 1.5;
+        }
+        .scan-result-found    { background: #d1fae5; border: 1px solid #6ee7b7; color: #065f46; }
+        .scan-result-inactive { background: #fee2e2; border: 1px solid #fca5a5; color: #991b1b; }
+        .scan-result-new-hire { background: #dbeafe; border: 1px solid #93c5fd; color: #1e40af; }
+        .scan-result-invalid  { background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; }
+        .last-line-badge {
+            display: inline-block; padding: 3px 10px; border-radius: 10px;
+            background: #667eea; color: white; font-size: 11px; font-weight: 600; margin-top: 6px;
+        }
+
+        /* Roster View */
+        .roster-container { padding: 16px; }
+        .roster-stats { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+        .roster-stat-box {
+            flex: 1; min-width: 100px; padding: 12px; background: #f9fafb;
+            border: 1px solid #e5e7eb; border-radius: 8px; text-align: center;
+        }
+        .roster-stat-box .stat-num { font-size: 24px; font-weight: 700; color: #1f2937; }
+        .roster-stat-box .stat-label { font-size: 11px; color: #6b7280; font-weight: 600; margin-top: 2px; }
+        .roster-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .roster-table th {
+            background: #f3f4f6; padding: 8px 12px; text-align: left;
+            font-size: 11px; font-weight: 700; color: #6b7280;
+            border-bottom: 2px solid #e5e7eb; position: sticky; top: 0;
+        }
+        .roster-table td { padding: 7px 12px; border-bottom: 1px solid #f3f4f6; color: #374151; }
+        .roster-table tr:hover td { background: #f9fafb; }
+        .roster-active-badge {
+            padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600;
+            background: #d1fae5; color: #065f46;
+        }
+        .roster-inactive-badge {
+            padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600;
+            background: #fee2e2; color: #991b1b;
+        }
+        .sync-preview-box {
+            background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 16px; margin-bottom: 16px;
+        }
     </style>
 </head>
 <body>
@@ -1203,6 +1263,37 @@
             const savingRef = useRef(false);
             const undoTimerRef = useRef(null);
             const isLoadingRef = useRef(false);
+            const [roster, setRoster] = useState({});
+
+            // Load roster from Firebase / localStorage
+            useEffect(() => {
+                const loadRoster = async () => {
+                    if (isFirebaseConfigured && db) {
+                        try {
+                            const snap = await db.ref('roster/associates').once('value');
+                            if (snap.exists()) { setRoster(snap.val()); return; }
+                        } catch (e) { console.error('Error loading roster:', e); }
+                    }
+                    const saved = storage.load('roster', {});
+                    setRoster(saved);
+                };
+                loadRoster();
+            }, []);
+
+            const handleSyncRoster = (updatedRoster) => {
+                setRoster(updatedRoster);
+            };
+
+            const handleUpdateAssociate = async (employeeId, fields) => {
+                const updated = { ...roster, [employeeId]: { ...roster[employeeId], ...fields } };
+                setRoster(updated);
+                storage.save('roster', updated);
+                if (isFirebaseConfigured && db) {
+                    const patch = {};
+                    Object.entries(fields).forEach(([k, v]) => { patch[`roster/associates/${employeeId}/${k}`] = v; });
+                    try { await db.ref('/').update(patch); } catch (e) { console.error('Error updating associate:', e); }
+                }
+            };
 
             // Load core associates from Firebase and localStorage
             useEffect(() => {
@@ -1297,6 +1388,35 @@
                         const docId = `${date}_${shift}`;
                         await db.ref('staffing/' + docId).set(staffingData);
                         storage.save(`staffing_${date}_${shift}`, staffingData);
+
+                        // Update lastLine / lastShift for each assigned associate
+                        const nameToId = {};
+                        Object.values(roster).forEach(a => { if (a.fullName) nameToId[a.fullName.toLowerCase().trim()] = a.employeeId; });
+                        const rosterUpdates = {};
+                        saveLines.forEach(line => {
+                            if (line.isCut) return;
+                            (line.positions || []).forEach(pos => {
+                                const name = (pos.name || '').trim();
+                                if (!name) return;
+                                const empId = nameToId[name.toLowerCase()];
+                                if (!empId) return;
+                                rosterUpdates[`roster/associates/${empId}/lastLine`] = line.letter;
+                                rosterUpdates[`roster/associates/${empId}/lastShift`] = shift;
+                            });
+                        });
+                        if (Object.keys(rosterUpdates).length > 0) {
+                            db.ref('/').update(rosterUpdates).then(() => {
+                                const updated = { ...roster };
+                                Object.entries(rosterUpdates).forEach(([path, val]) => {
+                                    const parts = path.split('/'); // roster/associates/<id>/field
+                                    const empId = parts[2], field = parts[3];
+                                    if (updated[empId]) updated[empId] = { ...updated[empId], [field]: val };
+                                });
+                                setRoster(updated);
+                                storage.save('roster', updated);
+                            }).catch(e => console.error('Error updating lastLine/lastShift:', e));
+                        }
+
                         setSaveStatus('Saved to cloud ✓');
                         setFirebaseStatus('connected');
                         setTimeout(() => setSaveStatus(''), 3000);
@@ -2244,6 +2364,12 @@
                             >
                                 Analytics
                             </button>
+                            <button
+                                className={`tab ${activeTab === 'roster' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('roster')}
+                            >
+                                Roster
+                            </button>
                         </div>
 
                         {activeTab === 'setup' && (
@@ -2284,6 +2410,7 @@
                                 onDrop={handleDrop}
                                 setLines={setLines}
                                 setWaitlist={setWaitlist}
+                                roster={roster}
                             />
                         )}
 
@@ -2315,6 +2442,237 @@
                                 firebaseStatus={firebaseStatus}
                             />
                         )}
+
+                        {activeTab === 'roster' && (
+                            <RosterView
+                                roster={roster}
+                                onSyncRoster={handleSyncRoster}
+                                onUpdateAssociate={handleUpdateAssociate}
+                            />
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function BadgeScanModal({ roster, lines, waitlist, currentDate, onAddToWaitlist, onClose }) {
+            const [scanInput, setScanInput] = useState('');
+            const [scanResult, setScanResult] = useState(null);
+            const [isSearching, setIsSearching] = useState(false);
+            const [newHireName, setNewHireName] = useState('');
+            const [newHireStatus, setNewHireStatus] = useState('new'); // 'new' | 'returning'
+            const inputRef = useRef(null);
+
+            useEffect(() => {
+                setTimeout(() => inputRef.current && inputRef.current.focus(), 100);
+            }, []);
+
+            const parseBadge = (code) => {
+                const match = code.trim().toUpperCase().match(/^PLX-(\w+)-([A-Z]{1,3})$/);
+                if (!match) return null;
+                return { employeeId: match[1], lastNamePrefix: match[2] };
+            };
+
+            const findLastLine = async (fullName) => {
+                const today = new Date(currentDate);
+                for (let i = 1; i <= 4; i++) {
+                    const d = new Date(today);
+                    d.setDate(today.getDate() - i);
+                    const dateStr = d.toISOString().split('T')[0];
+                    for (const shift of ['1st', '2nd', 'Swing']) {
+                        try {
+                            if (isFirebaseConfigured && db) {
+                                const snap = await db.ref(`staffing/${dateStr}_${shift}`).once('value');
+                                if (snap.exists()) {
+                                    const data = snap.val();
+                                    for (const line of (data.lines || [])) {
+                                        for (const pos of (line.positions || [])) {
+                                            if (pos.name && pos.name.trim().toLowerCase() === fullName.toLowerCase()) {
+                                                return { date: dateStr, shift, line: line.letter, daysAgo: i };
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }
+                return null;
+            };
+
+            const findDuplicate = (fullName) => {
+                const lc = fullName.toLowerCase();
+                for (const line of (lines || [])) {
+                    if (line.isCut) continue;
+                    for (const pos of (line.positions || [])) {
+                        if (pos.name && pos.name.trim().toLowerCase() === lc) return `Line ${line.letter}`;
+                    }
+                }
+                for (const w of (waitlist || [])) {
+                    if (w.name && w.name.trim().toLowerCase() === lc) return 'Waitlist';
+                }
+                return null;
+            };
+
+            const handleScan = async (code) => {
+                if (!code.trim()) return;
+                setIsSearching(true);
+                setScanResult(null);
+                setNewHireName('');
+                setNewHireStatus('new');
+                const rosterList = Object.values(roster || {});
+
+                const parsed = parseBadge(code);
+                if (parsed) {
+                    // Full badge format: PLX-ID-XXX
+                    const { employeeId, lastNamePrefix } = parsed;
+                    const match = rosterList.find(r => String(r.employeeId).toUpperCase() === String(employeeId).toUpperCase());
+                    if (!match) {
+                        setScanResult({ type: 'new_hire', employeeId, lastNamePrefix });
+                    } else if (!match.isActive) {
+                        setScanResult({ type: 'inactive', employee: match, alreadyStaffed: findDuplicate(match.fullName) });
+                    } else {
+                        setScanResult({ type: 'found', employee: match, alreadyStaffed: findDuplicate(match.fullName) });
+                    }
+                } else {
+                    // Fall back: treat input as a direct employee ID lookup
+                    const empId = code.trim().toUpperCase();
+                    const match = rosterList.find(r => String(r.employeeId).toUpperCase() === empId);
+                    if (!match) {
+                        setScanResult({ type: 'new_hire', employeeId: empId });
+                    } else if (!match.isActive) {
+                        setScanResult({ type: 'inactive', employee: match, alreadyStaffed: findDuplicate(match.fullName) });
+                    } else {
+                        setScanResult({ type: 'found', employee: match, alreadyStaffed: findDuplicate(match.fullName) });
+                    }
+                }
+                setIsSearching(false);
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') {
+                    handleScan(scanInput);
+                    setScanInput('');
+                } else if (e.key === 'Escape') {
+                    onClose();
+                }
+            };
+
+            const handleAdd = (name, isNew) => {
+                onAddToWaitlist(name, isNew);
+                setScanResult(null);
+                setScanInput('');
+                setTimeout(() => inputRef.current && inputRef.current.focus(), 50);
+            };
+
+            return (
+                <div className="quick-add-modal" onClick={onClose}>
+                    <div className="quick-add-content" style={{ maxWidth: '460px' }} onClick={(e) => e.stopPropagation()}>
+                        <div className="quick-add-header">
+                            <span className="quick-add-title">Badge Scanner</span>
+                            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', lineHeight: 1, cursor: 'pointer', color: '#6b7280', padding: '0 4px' }} title="Close">✕</button>
+                        </div>
+                        <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
+                            Scan a badge or enter an employee ID and press Enter.<br/>
+                            Badge format: <strong style={{ fontFamily: 'monospace' }}>PLX-[ID]-[3 letters]</strong> &nbsp;·&nbsp; Or just type an employee ID
+                        </p>
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            className="quick-add-input"
+                            value={scanInput}
+                            onChange={(e) => setScanInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Scan badge (PLX-12345-SMI) or enter employee ID..."
+                            style={{ letterSpacing: '0.5px', fontFamily: 'monospace', fontSize: '14px' }}
+                        />
+                        {isSearching && (
+                            <div style={{ textAlign: 'center', padding: '12px', color: '#6b7280', fontSize: '13px' }}>Looking up...</div>
+                        )}
+                        {scanResult && !isSearching && (
+                            <div>
+                                {scanResult.type === 'found' && (
+                                    <div className="scan-result-box scan-result-found">
+                                        <div style={{ fontWeight: '700', marginBottom: '2px' }}>✓ {scanResult.employee.fullName}</div>
+                                        <div style={{ fontSize: '11px', opacity: 0.8 }}>ID: {scanResult.employee.employeeId} · Active{scanResult.employee.assignedShift ? ` · ${scanResult.employee.assignedShift} shift` : ''}</div>
+                                        {scanResult.employee.lastLine ? (
+                                            <div>
+                                                <span className="last-line-badge">
+                                                    Last on Line {scanResult.employee.lastLine}{scanResult.employee.lastShift ? ` (${scanResult.employee.lastShift})` : ''}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <div style={{ marginTop: '4px', fontSize: '11px', opacity: 0.7 }}>No line history recorded yet</div>
+                                        )}
+                                        {scanResult.alreadyStaffed ? (
+                                            <div style={{ marginTop: '8px', padding: '6px 10px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '4px', fontSize: '12px', color: '#92400e', fontWeight: '600' }}>
+                                                ⚠ Already staffed on {scanResult.alreadyStaffed}
+                                            </div>
+                                        ) : (
+                                            <button className="btn btn-success" style={{ marginTop: '10px', width: '100%' }} onClick={() => handleAdd(scanResult.employee.fullName, false)}>
+                                                Add to Waitlist
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                                {scanResult.type === 'inactive' && (
+                                    <div className="scan-result-box scan-result-inactive">
+                                        <div style={{ fontWeight: '700', marginBottom: '2px' }}>⚠ {scanResult.employee.fullName}</div>
+                                        <div style={{ fontSize: '11px' }}>ID: {scanResult.employee.employeeId} · <strong>INACTIVE</strong> — not on active roster</div>
+                                        {scanResult.alreadyStaffed && (
+                                            <div style={{ marginTop: '6px', fontSize: '12px', fontWeight: '600' }}>
+                                                ⚠ Already staffed on {scanResult.alreadyStaffed}
+                                            </div>
+                                        )}
+                                        <button className="btn btn-danger" style={{ marginTop: '10px', width: '100%' }} onClick={() => handleAdd(scanResult.employee.fullName, false)}>
+                                            Add Anyway (Inactive)
+                                        </button>
+                                    </div>
+                                )}
+                                {scanResult.type === 'new_hire' && (
+                                    <div className="scan-result-box scan-result-new-hire">
+                                        <div style={{ fontWeight: '700', marginBottom: '4px' }}>★ Not in Roster{scanResult.employeeId ? ` — ID: ${scanResult.employeeId}` : ''}</div>
+                                        <div style={{ marginBottom: '8px' }}>
+                                            <input
+                                                type="text"
+                                                value={newHireName}
+                                                onChange={(e) => setNewHireName(e.target.value)}
+                                                placeholder="Enter full name..."
+                                                style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', border: '1px solid #93c5fd', borderRadius: '4px', fontSize: '13px' }}
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                                            <button
+                                                className={`btn btn-small ${newHireStatus === 'new' ? 'btn-primary' : 'btn-secondary'}`}
+                                                style={{ flex: 1 }}
+                                                onClick={() => setNewHireStatus('new')}
+                                            >
+                                                New Associate
+                                            </button>
+                                            <button
+                                                className={`btn btn-small ${newHireStatus === 'returning' ? 'btn-primary' : 'btn-secondary'}`}
+                                                style={{ flex: 1 }}
+                                                onClick={() => setNewHireStatus('returning')}
+                                            >
+                                                Returning
+                                            </button>
+                                        </div>
+                                        <button
+                                            className="btn btn-primary"
+                                            style={{ width: '100%' }}
+                                            disabled={!newHireName.trim()}
+                                            onClick={() => handleAdd(newHireName.trim(), newHireStatus === 'new')}
+                                        >
+                                            Add to Waitlist
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+                            <button className="btn btn-secondary" onClick={onClose}>Close</button>
+                        </div>
                     </div>
                 </div>
             );
@@ -2345,30 +2703,24 @@
             onDragOver,
             onDrop,
             setLines,
-            setWaitlist
+            setWaitlist,
+            roster
         }) {
             const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
             const [quickAddInput, setQuickAddInput] = useState('');
-            const [quickAddNames, setQuickAddNames] = useState([]);
+            const [quickAddNames, setQuickAddNames] = useState([]); // [{name, lastLine, lastShift}]
             const [waitlistSearch, setWaitlistSearch] = useState('');
             const [selectMode, setSelectMode] = useState(false);
             const [selectedPositions, setSelectedPositions] = useState([]);
             const [selectedWaitlist, setSelectedWaitlist] = useState([]);
-            const quickAddInputRef = useRef(null);
+            const [showBadgeScan, setShowBadgeScan] = useState(false);
 
-            useEffect(() => {
-                if (isQuickAddOpen && quickAddInputRef.current) {
-                    quickAddInputRef.current.focus();
-                }
-            }, [isQuickAddOpen]);
-
-            const handleQuickAddKeyPress = (e) => {
-                if (e.key === 'Enter' && quickAddInput.trim()) {
-                    setQuickAddNames([...quickAddNames, quickAddInput.trim()]);
-                    setQuickAddInput('');
-                } else if (e.key === 'Escape') {
-                    handleCancelQuickAdd();
-                }
+            const handleQuickAddName = (nameOrAssoc) => {
+                const name = typeof nameOrAssoc === 'string' ? nameOrAssoc : nameOrAssoc.fullName;
+                const lastLine  = typeof nameOrAssoc === 'object' ? nameOrAssoc.lastLine  || null : null;
+                const lastShift = typeof nameOrAssoc === 'object' ? nameOrAssoc.lastShift || null : null;
+                setQuickAddNames(prev => [...prev, { name, lastLine, lastShift }]);
+                setQuickAddInput('');
             };
 
             const handleRemoveQuickAddName = (index) => {
@@ -2377,7 +2729,7 @@
 
             const handleConfirmQuickAdd = () => {
                 if (quickAddNames.length > 0) {
-                    onQuickAddWaitlist(quickAddNames);
+                    onQuickAddWaitlist(quickAddNames.map(n => n.name));
                 }
                 setIsQuickAddOpen(false);
                 setQuickAddInput('');
@@ -2544,6 +2896,14 @@
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <button
+                                className="btn btn-secondary"
+                                onClick={() => setShowBadgeScan(true)}
+                                style={{ fontSize: '12px', padding: '6px 12px' }}
+                                title="Scan associate badge (PLX-ID-XXX)"
+                            >
+                                Scan Badge
+                            </button>
+                            <button
                                 className={`btn ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => { setSelectMode(!selectMode); handleDeselectAll(); }}
                                 disabled={isLocked}
@@ -2579,6 +2939,7 @@
                                     line={line}
                                     isLocked={isLocked}
                                     coreAssociates={coreAssociates}
+                                    roster={roster}
                                     selectMode={selectMode}
                                     selectedPositions={selectedPositions}
                                     onTogglePositionSelect={togglePositionSelect}
@@ -2614,6 +2975,15 @@
                                         style={{ fontSize: '11px', opacity: isLocked ? 0.5 : 1 }}
                                     >
                                         Quick Add
+                                    </button>
+                                    <button
+                                        className="btn btn-secondary btn-small"
+                                        onClick={() => setShowBadgeScan(true)}
+                                        disabled={isLocked}
+                                        style={{ fontSize: '11px', opacity: isLocked ? 0.5 : 1 }}
+                                        title="Scan associate badge (PLX-ID-XXX)"
+                                    >
+                                        Scan
                                     </button>
                                     <button
                                         className="btn btn-success btn-small"
@@ -2656,11 +3026,11 @@
                                         <div style={{ fontSize: '10px', color: '#6b7280', fontWeight: '600' }}>
                                             #{idx + 1}
                                         </div>
-                                        <input
-                                            type="text"
+                                        <AutocompleteInput
                                             className="waitlist-input"
                                             value={item.name}
-                                            onChange={(e) => onUpdateWaitlistItem(item.id, e.target.value, item.isNew)}
+                                            onChange={(val) => onUpdateWaitlistItem(item.id, val, item.isNew)}
+                                            roster={roster}
                                             placeholder="Type name..."
                                             disabled={isLocked}
                                         />
@@ -2734,26 +3104,31 @@
                                     </button>
                                 </div>
 
-                                <input
-                                    ref={quickAddInputRef}
-                                    type="text"
+                                <AutocompleteInput
                                     className="quick-add-input"
                                     value={quickAddInput}
-                                    onChange={(e) => setQuickAddInput(e.target.value)}
-                                    onKeyDown={handleQuickAddKeyPress}
+                                    onChange={setQuickAddInput}
+                                    onSelect={handleQuickAddName}
+                                    onEnter={handleQuickAddName}
+                                    roster={roster}
                                     placeholder="Type a name and press Enter..."
                                 />
 
                                 <div className="quick-add-hint">
-                                    Press Enter to add • Press Escape to close
+                                    Select from suggestions or press Enter to add • Press Escape to close
                                 </div>
 
                                 {quickAddNames.length > 0 && (
                                     <div className="quick-add-list">
-                                        {quickAddNames.map((name, index) => (
+                                        {quickAddNames.map((item, index) => (
                                             <div key={index} className="quick-add-item">
-                                                <span style={{ fontWeight: '500' }}>
-                                                    {index + 1}. {name}
+                                                <span style={{ fontWeight: '500', flex: 1 }}>
+                                                    {index + 1}. {item.name}
+                                                    {item.lastLine && (
+                                                        <span style={{ marginLeft: '6px', fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: '#667eea', color: 'white', fontWeight: '600' }}>
+                                                            Line {item.lastLine}{item.lastShift ? ` (${item.lastShift})` : ''}
+                                                        </span>
+                                                    )}
                                                 </span>
                                                 <button
                                                     className="btn btn-danger btn-small"
@@ -2790,11 +3165,113 @@
                             </div>
                         </div>
                     )}
+
+                    {showBadgeScan && (
+                        <BadgeScanModal
+                            roster={roster}
+                            lines={lines}
+                            waitlist={waitlist}
+                            currentDate={currentDate}
+                            onAddToWaitlist={(name, isNew) => {
+                                setWaitlist(prev => [...prev, { id: Date.now() + Math.random(), name, isNew: !!isNew }]);
+                            }}
+                            onClose={() => setShowBadgeScan(false)}
+                        />
+                    )}
                 </>
             );
         }
 
-        function LineColumn({ line, isLocked, coreAssociates, selectMode, selectedPositions, onTogglePositionSelect, onUpdatePosition, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop }) {
+        function AutocompleteInput({ value, onChange, onSelect, onEnter, roster, placeholder, disabled, className }) {
+            const [suggestions, setSuggestions] = useState([]);
+            const [highlightedIdx, setHighlightedIdx] = useState(-1);
+            const [open, setOpen] = useState(false);
+
+            const buildSuggestions = (query) => {
+                if (!query || query.length < 2 || !roster || Object.keys(roster).length === 0) return [];
+                const lq = query.toLowerCase();
+                return Object.values(roster)
+                    .filter(r => r.isActive && r.fullName.toLowerCase().includes(lq))
+                    .sort((a, b) => {
+                        const als = a.fullName.toLowerCase().startsWith(lq);
+                        const bls = b.fullName.toLowerCase().startsWith(lq);
+                        if (als !== bls) return als ? -1 : 1;
+                        return a.fullName.localeCompare(b.fullName);
+                    })
+                    .slice(0, 8);
+            };
+
+            const selectSuggestion = (assoc) => {
+                onChange(assoc.fullName);
+                setSuggestions([]);
+                setOpen(false);
+                setHighlightedIdx(-1);
+                if (onSelect) onSelect(assoc);
+            };
+
+            return (
+                <div className="autocomplete-wrapper">
+                    <input
+                        type="text"
+                        className={className}
+                        value={value}
+                        placeholder={placeholder}
+                        disabled={disabled}
+                        onChange={(e) => {
+                            onChange(e.target.value);
+                            const s = buildSuggestions(e.target.value);
+                            setSuggestions(s);
+                            setOpen(s.length > 0);
+                            setHighlightedIdx(-1);
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'ArrowDown' && open) { e.preventDefault(); setHighlightedIdx(i => Math.min(i + 1, suggestions.length - 1)); return; }
+                            if (e.key === 'ArrowUp'   && open) { e.preventDefault(); setHighlightedIdx(i => Math.max(i - 1, 0)); return; }
+                            if (e.key === 'Tab' && open && suggestions.length > 0) {
+                                const target = highlightedIdx >= 0 ? suggestions[highlightedIdx] : suggestions[0];
+                                if (target) { e.preventDefault(); selectSuggestion(target); return; }
+                            }
+                            if (e.key === 'Enter') {
+                                if (open && highlightedIdx >= 0) { e.preventDefault(); selectSuggestion(suggestions[highlightedIdx]); return; }
+                                if (onEnter && value.trim()) { e.preventDefault(); onEnter(value.trim()); return; }
+                            }
+                            if (e.key === 'Escape') { setOpen(false); setHighlightedIdx(-1); }
+                        }}
+                        onBlur={() => { setTimeout(() => setOpen(false), 150); }}
+                        onFocus={() => {
+                            if (value && value.length >= 2) {
+                                const s = buildSuggestions(value);
+                                setSuggestions(s);
+                                setOpen(s.length > 0);
+                            }
+                        }}
+                    />
+                    {open && suggestions.length > 0 && (
+                        <div className="autocomplete-dropdown">
+                            {suggestions.map((a, i) => (
+                                <div
+                                    key={a.employeeId}
+                                    className={`autocomplete-item${i === highlightedIdx ? ' highlighted' : ''}`}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => selectSuggestion(a)}
+                                    onMouseEnter={() => setHighlightedIdx(i)}
+                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}
+                                >
+                                    <span>{a.fullName}</span>
+                                    {a.lastLine && (
+                                        <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '8px', background: '#667eea', color: 'white', fontWeight: '600', flexShrink: 0 }}>
+                                            Line {a.lastLine}
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function LineColumn({ line, isLocked, coreAssociates, roster, selectMode, selectedPositions, onTogglePositionSelect, onUpdatePosition, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop }) {
             const [isEditing, setIsEditing] = useState(false);
             const [editLetter, setEditLetter] = useState(line.letter);
             const [editLeads, setEditLeads] = useState((line.leads || []).join(', '));
@@ -3103,11 +3580,11 @@
                                         <div className="position-number" style={position.isCrescent ? { color: '#831843' } : {}}>
                                             {position.isCrescent ? `C${crescentIndex}` : index + 1}
                                         </div>
-                                        <input
-                                            type="text"
+                                        <AutocompleteInput
                                             className="position-input"
                                             value={position.name}
-                                            onChange={(e) => onUpdatePosition(line.id, position.id, e.target.value, position.isNew)}
+                                            onChange={(val) => onUpdatePosition(line.id, position.id, val, position.isNew)}
+                                            roster={roster}
                                             placeholder="Name..."
                                             disabled={line.isCut || isLocked}
                                         />
@@ -4917,6 +5394,285 @@
                             </div>
                         )}
                     </div>
+                </div>
+            );
+        }
+
+        function RosterView({ roster, onSyncRoster, onUpdateAssociate }) {
+            const [search, setSearch] = useState('');
+            const [filterStatus, setFilterStatus] = useState('active');
+            const [filterShift, setFilterShift] = useState('all');
+            const [syncStatus, setSyncStatus] = useState('');
+            const [lastSync, setLastSync] = useState(null);
+            const [syncPreview, setSyncPreview] = useState(null);
+            const fileRef = useRef(null);
+
+            useEffect(() => {
+                if (isFirebaseConfigured && db) {
+                    db.ref('roster/lastSync').once('value').then(snap => {
+                        if (snap.exists()) setLastSync(snap.val());
+                    }).catch(() => {});
+                }
+                const saved = storage.load('rosterLastSync', null);
+                if (saved && !lastSync) setLastSync(saved);
+            }, []);
+
+            const handleFileUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                fileRef.current.value = '';
+                setSyncStatus('Parsing file...');
+                setSyncPreview(null);
+                try {
+                    const data = await file.arrayBuffer();
+                    const wb = XLSX.read(data, { type: 'array' });
+                    const ws = wb.Sheets[wb.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+                    if (rows.length === 0) { setSyncStatus('Error: No data rows found in file'); return; }
+
+                    const headers = Object.keys(rows[0]);
+                    const findCol = (opts) => headers.find(h => opts.some(o => h.toLowerCase().replace(/[\s_-]/g, '').includes(o.toLowerCase().replace(/[\s_-]/g, ''))));
+                    const idCol    = findCol(['employeeid', 'empid', 'employee#', 'employeenumber', 'badgeid', 'id', 'legacycontactid', 'personplacedlegacy']);
+                    const fullNameCol = findCol(['fullname', 'personplacedname', 'personplaced', 'associate']);
+                    const firstCol = !fullNameCol ? findCol(['firstname', 'first', 'fname', 'givenname']) : null;
+                    const lastCol  = !fullNameCol ? findCol(['lastname', 'last', 'lname', 'surname', 'familyname']) : null;
+                    const shiftCol = findCol(['shift', 'assignedshift', 'workshift']);
+
+                    if (!idCol || (!fullNameCol && (!firstCol || !lastCol))) {
+                        setSyncStatus(`Error: Missing columns. Need Employee ID and Name. Found: ${headers.join(', ')}`);
+                        return;
+                    }
+
+                    const fileAssociates = {};
+                    rows.forEach(row => {
+                        const empId = String(row[idCol] || '').trim();
+                        if (!empId) return;
+                        let firstName, lastName, fullName;
+                        if (fullNameCol) {
+                            fullName = String(row[fullNameCol] || '').trim();
+                            if (!fullName) return;
+                            if (fullName.includes(',')) {
+                                const parts = fullName.split(',');
+                                lastName = parts[0].trim(); firstName = parts.slice(1).join(',').trim();
+                            } else {
+                                const sp = fullName.indexOf(' ');
+                                firstName = sp !== -1 ? fullName.slice(0, sp).trim() : fullName;
+                                lastName  = sp !== -1 ? fullName.slice(sp + 1).trim() : '';
+                            }
+                        } else {
+                            firstName = String(row[firstCol] || '').trim();
+                            lastName  = String(row[lastCol]  || '').trim();
+                            fullName  = `${firstName} ${lastName}`.trim();
+                            if (!firstName) return;
+                        }
+                        const assignedShift = shiftCol ? String(row[shiftCol] || '').trim() || null : null;
+                        fileAssociates[empId] = { employeeId: empId, firstName, lastName, fullName, isActive: true, assignedShift };
+                    });
+
+                    const fileIds = new Set(Object.keys(fileAssociates));
+                    const currentRoster = roster || {};
+                    const currentIds = new Set(Object.keys(currentRoster));
+                    const newCount      = [...fileIds].filter(id => !currentIds.has(id)).length;
+                    const inactiveCount = [...currentIds].filter(id => currentRoster[id].isActive && !fileIds.has(id)).length;
+                    const updatedCount  = [...fileIds].filter(id => currentIds.has(id)).length;
+
+                    setSyncPreview({ fileAssociates, newCount, inactiveCount, updatedCount, total: fileIds.size });
+                    setSyncStatus('');
+                } catch (err) {
+                    setSyncStatus(`Error: ${err.message}`);
+                }
+            };
+
+            const confirmSync = async () => {
+                const { fileAssociates } = syncPreview;
+                setSyncStatus('Syncing...');
+                try {
+                    const currentRoster = roster || {};
+                    const fileIds = new Set(Object.keys(fileAssociates));
+                    const updatedRoster = {};
+                    // Merge file data into existing records, preserving lastLine/lastShift
+                    fileIds.forEach(id => {
+                        const existing = currentRoster[id] || {};
+                        updatedRoster[id] = {
+                            ...existing,
+                            ...fileAssociates[id],
+                            lastLine:  existing.lastLine  || null,
+                            lastShift: existing.lastShift || null,
+                        };
+                    });
+                    Object.entries(currentRoster).forEach(([id, assoc]) => {
+                        if (!fileIds.has(id)) updatedRoster[id] = { ...assoc, isActive: false };
+                    });
+                    const syncTime = new Date().toISOString();
+                    if (isFirebaseConfigured && db) {
+                        await db.ref('roster').set({ associates: updatedRoster, lastSync: syncTime });
+                    }
+                    storage.save('roster', updatedRoster);
+                    storage.save('rosterLastSync', syncTime);
+                    onSyncRoster(updatedRoster);
+                    setLastSync(syncTime);
+                    setSyncPreview(null);
+                    const added = Object.values(updatedRoster).filter(a => a.isActive).length;
+                    setSyncStatus(`Synced — ${added} active associates`);
+                    setTimeout(() => setSyncStatus(''), 5000);
+                } catch (err) {
+                    setSyncStatus(`Error: ${err.message}`);
+                }
+            };
+
+            const rosterList = Object.values(roster || {});
+            const filtered = rosterList.filter(a => {
+                if (filterStatus === 'active'   && !a.isActive)  return false;
+                if (filterStatus === 'inactive' && a.isActive)   return false;
+                if (filterShift !== 'all' && (a.assignedShift || '') !== filterShift) return false;
+                if (search.trim() && !a.fullName.toLowerCase().includes(search.toLowerCase()) && !String(a.employeeId).includes(search)) return false;
+                return true;
+            }).sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+            const activeCount   = rosterList.filter(a => a.isActive).length;
+            const inactiveCount = rosterList.filter(a => !a.isActive).length;
+
+            return (
+                <div className="roster-container">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                            <h3 style={{ margin: 0, fontSize: '16px', color: '#1f2937' }}>Associate Roster</h3>
+                            {lastSync
+                                ? <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>Last synced: {new Date(lastSync).toLocaleString()}</div>
+                                : <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>No roster synced yet</div>
+                            }
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            {syncStatus && (
+                                <span style={{ fontSize: '12px', color: syncStatus.startsWith('Error') ? '#dc2626' : '#059669', fontWeight: '600' }}>
+                                    {syncStatus}
+                                </span>
+                            )}
+                            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={handleFileUpload} />
+                            <button className="btn btn-primary" onClick={() => fileRef.current.click()}>
+                                Upload Roster File
+                            </button>
+                        </div>
+                    </div>
+
+                    {syncPreview && (
+                        <div className="sync-preview-box">
+                            <div style={{ fontWeight: '700', marginBottom: '8px', color: '#92400e', fontSize: '13px' }}>Roster Sync Preview</div>
+                            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px', color: '#374151', marginBottom: '12px' }}>
+                                <span>Total in file: <strong>{syncPreview.total}</strong></span>
+                                <span style={{ color: '#059669' }}>New associates: <strong>{syncPreview.newCount}</strong></span>
+                                <span>Already in roster: <strong>{syncPreview.updatedCount}</strong></span>
+                                <span style={{ color: '#dc2626' }}>Will become inactive: <strong>{syncPreview.inactiveCount}</strong></span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button className="btn btn-success" onClick={confirmSync}>Confirm Sync</button>
+                                <button className="btn btn-secondary" onClick={() => setSyncPreview(null)}>Cancel</button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="roster-stats">
+                        <div className="roster-stat-box">
+                            <div className="stat-num" style={{ color: '#059669' }}>{activeCount}</div>
+                            <div className="stat-label">ACTIVE</div>
+                        </div>
+                        <div className="roster-stat-box">
+                            <div className="stat-num" style={{ color: '#dc2626' }}>{inactiveCount}</div>
+                            <div className="stat-label">INACTIVE</div>
+                        </div>
+                        <div className="roster-stat-box">
+                            <div className="stat-num">{rosterList.length}</div>
+                            <div className="stat-label">TOTAL</div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                        <input
+                            type="text"
+                            className="waitlist-input"
+                            style={{ flex: 1, minWidth: '200px' }}
+                            placeholder="Search by name or Employee ID..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                        <select
+                            style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: 'white' }}
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                        >
+                            <option value="all">All</option>
+                            <option value="active">Active only</option>
+                            <option value="inactive">Inactive only</option>
+                        </select>
+                        <select
+                            style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: 'white' }}
+                            value={filterShift}
+                            onChange={(e) => setFilterShift(e.target.value)}
+                        >
+                            <option value="all">All shifts</option>
+                            <option value="1st">1st shift</option>
+                            <option value="2nd">2nd shift</option>
+                            <option value="3rd">3rd shift</option>
+                        </select>
+                    </div>
+
+                    {rosterList.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '48px 24px', color: '#9ca3af' }}>
+                            <div style={{ fontSize: '36px', marginBottom: '8px' }}>📋</div>
+                            <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280' }}>No roster loaded</div>
+                            <div style={{ fontSize: '12px', marginTop: '4px' }}>Upload a CSV or Excel file exported from your system to populate the roster.</div>
+                            <div style={{ fontSize: '11px', marginTop: '8px', color: '#9ca3af' }}>Required columns: Employee ID · First Name · Last Name</div>
+                        </div>
+                    ) : (
+                        <div style={{ overflowX: 'auto', maxHeight: '520px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
+                            <table className="roster-table">
+                                <thead>
+                                    <tr>
+                                        <th>Employee ID</th>
+                                        <th>Name</th>
+                                        <th>Status</th>
+                                        <th>Assigned Shift</th>
+                                        <th>Last Line</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filtered.map(a => (
+                                        <tr key={a.employeeId}>
+                                            <td style={{ fontFamily: 'monospace', color: '#6b7280', fontSize: '11px' }}>{a.employeeId}</td>
+                                            <td style={{ fontWeight: '500' }}>{a.fullName}</td>
+                                            <td>
+                                                {a.isActive
+                                                    ? <span className="roster-active-badge">Active</span>
+                                                    : <span className="roster-inactive-badge">Inactive</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <select
+                                                    value={a.assignedShift || ''}
+                                                    onChange={e => onUpdateAssociate && onUpdateAssociate(a.employeeId, { assignedShift: e.target.value || null })}
+                                                    style={{ fontSize: '11px', padding: '2px 4px', border: '1px solid #d1d5db', borderRadius: '4px', background: 'white', color: '#374151' }}
+                                                >
+                                                    <option value="">—</option>
+                                                    <option value="1st">1st</option>
+                                                    <option value="2nd">2nd</option>
+                                                    <option value="3rd">3rd</option>
+                                                </select>
+                                            </td>
+                                            <td style={{ fontFamily: 'monospace', color: '#6b7280', fontSize: '11px' }}>
+                                                {a.lastLine
+                                                    ? <span title={a.lastShift ? `${a.lastShift} shift` : ''} style={{ fontWeight: '600', color: '#1f2937' }}>{a.lastLine}{a.lastShift ? <span style={{ fontWeight: '400', color: '#9ca3af' }}> ({a.lastShift})</span> : null}</span>
+                                                    : <span style={{ color: '#d1d5db' }}>—</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {filtered.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '24px', color: '#9ca3af', fontSize: '12px' }}>No matches</div>
+                            )}
+                        </div>
+                    )}
                 </div>
             );
         }
