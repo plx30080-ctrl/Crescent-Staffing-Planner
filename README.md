@@ -157,6 +157,101 @@ const FIREBASE_CONFIG = {
 3. Add core associates with optional notes
 4. Core associates can be pre-loaded when setting up shifts (optional)
 
+## Badge Check (Suspensions / DNR / Early Leaves)
+
+The **Badge Check** tab lets you scan a badge (or type an EID) and instantly see
+whether an associate is suspended, DNR, terminated, or clear to work. The data
+comes from the group SharePoint tracking workbook (the same data that goes out
+in the per-submission emails).
+
+### How matching works
+
+- Associates are matched on **EID** (employee/badge ID) — not name — so flipped
+  names and typos don't cause misses.
+- The workbook is scanned across **all tabs**. Any row with an `EID` column and a
+  `Corrective Action` of DNR / Suspension / Termination becomes a status entry.
+  Rows with only a `Category` / `Time Left` (the submission log) are counted as
+  **early-leave events** (informational, not blocking).
+- One EID can appear many times; the tool resolves to a single effective status:
+  **DNR / Termination always outrank a Suspension**, and ties break to the most
+  recent date.
+
+### Suspension return dates
+
+Return dates are **calculated**, not entered. The workweek is **Mon–Thu**, and a
+suspension is served for **5 working days after the issuance date**. Example: a
+suspension issued Thu 6/25 returns **Mon 7/6**. The badge then shows
+`SUSPENDED until Mon 7/6` and auto-clears on the return date. To change the rule,
+edit `STATUS_WORKING_DAYS` / `SUSPENSION_WORKING_DAYS` in `index.html`.
+
+### Where status shows
+
+The same live status data drives both the **Badge Check** scan and the **inline
+pills** on the staffing screen (line slots + waitlist). Inline pills match on
+**either a typed name or a scanned EID**, so both staffing styles flag correctly.
+
+### "Last lead they worked for"
+
+To keep crews consistent under a lead even when that lead runs a different line,
+the tool reads saved staffing reports and shows the **lead each associate last
+worked for**:
+- **Inline while staffing** — a small `↳ <lead>` hint under each name (turns
+  **amber** when that lead differs from the current line's lead).
+- **On the badge scan result** — `↳ Usually works for: <lead>` (only for people
+  whose EID↔name is known, i.e. those in the tracking sheet).
+
+### Getting the data in
+
+Both ingestion paths funnel through the **same `statusRaw` node** — a raw
+`{ submissions, corrective }` payload — which the app resolves into statuses on
+load. This keeps the precedence + return-date logic in one place no matter how the
+data arrives.
+
+**Manual upload:** On the Badge Check tab, click **Upload Tracking Sheet** and pick
+the exported `.xlsx`. It writes the rows to `statusRaw` (+ `statusMeta`); every
+device resolves and sees it.
+
+**Next — automated daily sync from SharePoint (Power Automate):** Realtime
+Database has a REST API, so a scheduled flow can push the data without any app
+backend. Recommended shape:
+
+1. **Recurrence** trigger (e.g., daily at shift start).
+2. **Excel Online (Business) → List rows present in a table** for each tab. (Standard connector.)
+3. **HTTP** action (premium connector) — `PUT` the rows to Firebase:
+   `PUT https://staffingtool-1ab4f-default-rtdb.firebaseio.com/statusRaw.json?auth=<DB_SECRET>`
+   with a JSON body of the raw rows, and `PUT .../statusMeta.json` with
+   `{ "updatedAt": "<utcNow>", "source": "sharepoint-sync" }`.
+   - Get `<DB_SECRET>` from Firebase Console → Project Settings → Service Accounts →
+     Database secrets. Store it in a secure variable / Azure Key Vault, never in the flow body.
+
+> **Why push raw rows (`statusRaw`) instead of a resolved `statusList`?** It keeps
+> the DNR-outranks-suspension precedence and the working-day return-date math in
+> one place (the app), so Power Automate just dumps rows — no date logic in the
+> flow. The app resolves `statusRaw` on load (live — open screens update when the
+> sync runs). Row field names are matched leniently, so the clean names from the
+> Power Automate Select step *and* the original Excel headers both work.
+
+### ⚠️ Security — read before syncing real names
+
+This list contains sensitive HR/PII data, and the database currently uses the
+wide-open default rule (`".read"/".write": true`). **Lock this down before pushing
+real suspension/DNR data.** Because the app has no login today, proper protection
+means adding **Firebase Authentication** (restrict sign-in to the team) and then:
+
+```
+{
+  "rules": {
+    "statusList":  { ".read": "auth != null", ".write": "auth != null" },
+    "statusRaw":   { ".read": "auth != null", ".write": "auth != null" },
+    "statusMeta":  { ".read": "auth != null", ".write": "auth != null" }
+  }
+}
+```
+
+The Power Automate flow would then authenticate with a **service-account OAuth
+token** rather than the legacy DB secret. Adding auth changes the login flow for
+all users, so it's a deliberate next step — flagged here, not silently skipped.
+
 ## Browser Compatibility
 
 - Chrome 90+

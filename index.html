@@ -643,6 +643,72 @@
         .flag-high { background: #d1fae5; color: #065f46; }
         .flag-low { background: #fee2e2; color: #991b1b; }
         .flag-crescent { background: #fce7f3; color: #831843; font-weight: 700; }
+        .flag-dnr { background: #fee2e2; color: #991b1b; font-weight: 700; }
+        .flag-terminated { background: #1f2937; color: #fecaca; font-weight: 700; }
+        .flag-suspended { background: #ffedd5; color: #9a3412; font-weight: 700; }
+        .flag-early { background: #f3f4f6; color: #374151; }
+
+        /* Inline status pill shown next to a name on a line / waitlist */
+        .status-pill {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+            margin-left: 4px;
+        }
+
+        /* Name + "usually works for" hint stacked inside a position slot */
+        .position-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .position-main > .position-input { flex: 0 0 auto; width: 100%; }
+        .lead-hint {
+            font-size: 9px;
+            line-height: 1.1;
+            color: #6b7280;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .lead-hint.diff { color: #b45309; font-weight: 600; }
+
+        /* Badge scan / check-in box */
+        .scan-box {
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .scan-input {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            border: 2px solid #d1d5db;
+            border-radius: 6px;
+            text-align: center;
+        }
+        .scan-input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.15); }
+        .scan-banner {
+            margin-top: 14px;
+            padding: 18px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 700;
+        }
+        .scan-banner .scan-name { font-size: 22px; }
+        .scan-banner .scan-status { font-size: 16px; margin-top: 4px; }
+        .scan-banner .scan-detail { font-size: 12px; margin-top: 6px; font-weight: 600; opacity: 0.85; }
+        .scan-banner.block { background: #fef2f2; border: 2px solid #dc2626; color: #991b1b; }
+        .scan-banner.suspend { background: #fff7ed; border: 2px solid #ea580c; color: #9a3412; }
+        .scan-banner.clear { background: #f0fdf4; border: 2px solid #16a34a; color: #166534; }
+        .scan-banner.unknown { background: #f9fafb; border: 2px solid #9ca3af; color: #374151; }
+        .status-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+        .status-row:hover { background: #f9fafb; }
+        .status-meta-line { font-size: 12px; color: #6b7280; margin-bottom: 12px; }
 
         .flag-dropdown {
             position: relative;
@@ -1058,7 +1124,7 @@
             .duplicate-warning button, .line-edit-controls, .lock-banner button { display: none !important; }
             .container { box-shadow: none; border-radius: 0; }
             .content { padding: 8px; }
-            .stats-bar { border: 1px solid #ccc; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            .stats-bar { border: 1px solid #ccc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .stats-bar button, .stats-bar .save-status, .stats-bar .save-error { display: none !important; }
             .staffing-layout { height: auto !important; overflow: visible !important; }
             .lines-container { overflow: visible !important; flex-wrap: wrap; }
@@ -1088,7 +1154,7 @@
             padding: 10px 16px; margin-bottom: 12px; display: flex; justify-content: space-between;
             align-items: center; font-size: 13px; font-weight: 600; color: #92400e;
         }
-        .locked-overlay { pointer-events: none; opacity: 0.6; user-select: none; }
+        .locked-overlay { pointer-events: none; opacity: 0.6; -webkit-user-select: none; user-select: none; }
 
         .duplicate-warning {
             background: #fff7ed; border: 1px solid #f97316; border-radius: 6px;
@@ -1181,6 +1247,341 @@
             remove: (key) => { try { localStorage.removeItem(key); } catch(e) {} }
         };
 
+        // ===== Associate status (suspensions / DNR / early leaves) =====
+        // Workweek is Mon-Thu. A suspension is served for 5 working days; the
+        // associate may return on the date that is 5 working days after issuance.
+        const STATUS_WORKING_DAYS = [1, 2, 3, 4]; // 0=Sun ... 6=Sat
+        const SUSPENSION_WORKING_DAYS = 5;
+
+        const normalizeName = (s) => (s || '').toString().toLowerCase()
+            .replace(/[.,]/g, ' ').replace(/\s+/g, ' ').trim();
+        const nameTokenKey = (s) => normalizeName(s).split(' ').filter(Boolean).sort().join(' ');
+        const normalizeEid = (v) => (v == null ? '' : v.toString().replace(/[^0-9]/g, '').trim());
+
+        // "Tyler Powe" -> "Powe, Tyler" for display (last whitespace token = surname).
+        // Leaves single names and already-comma'd names untouched.
+        const formatLastFirst = (name) => {
+            const n = (name || '').toString().trim();
+            if (!n || n.includes(',')) return n;
+            const parts = n.split(/\s+/);
+            if (parts.length < 2) return n;
+            return `${parts[parts.length - 1]}, ${parts.slice(0, -1).join(' ')}`;
+        };
+        // Surname sort key (case-insensitive) for alphabetizing by last name.
+        const lastNameKey = (name) => {
+            const n = (name || '').toString().trim();
+            if (!n) return '';
+            if (n.includes(',')) return n.split(',')[0].trim().toLowerCase();
+            const parts = n.split(/\s+/);
+            return (parts.length > 1 ? parts[parts.length - 1] : parts[0]).toLowerCase();
+        };
+
+        const parseSheetDate = (v) => {
+            if (v == null || v === '') return null;
+            if (v instanceof Date) return isNaN(v) ? null : v;
+            if (typeof v === 'number') { // Excel serial date
+                const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+                return isNaN(d) ? null : d;
+            }
+            const s = v.toString().trim();
+            const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+            if (m) {
+                const yr = m[3].length === 2 ? '20' + m[3] : m[3];
+                const d = new Date(Number(yr), Number(m[1]) - 1, Number(m[2]));
+                return isNaN(d) ? null : d;
+            }
+            // Parse ISO YYYY-MM-DD as a LOCAL date (new Date('2026-07-06') is UTC,
+            // which shifts back a day in negative-offset timezones).
+            const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (iso) {
+                const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+                return isNaN(d) ? null : d;
+            }
+            const d = new Date(s);
+            return isNaN(d) ? null : d;
+        };
+        const toISODate = (d) => {
+            const date = (d instanceof Date) ? d : parseSheetDate(d);
+            if (!date) return '';
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        };
+        const formatShortDate = (d) => {
+            const date = (d instanceof Date) ? d : parseSheetDate(d);
+            if (!date) return '';
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            // Show the year only when it isn't the current one, so a stray
+            // future-dated suspension (bad source data) is obvious at a glance.
+            const yr = date.getFullYear() !== new Date().getFullYear() ? `/${String(date.getFullYear()).slice(-2)}` : '';
+            return `${days[date.getDay()]} ${date.getMonth() + 1}/${date.getDate()}${yr}`;
+        };
+
+        // Return date = SUSPENSION_WORKING_DAYS Mon-Thu days after issuance.
+        const computeSuspensionReturn = (issuanceDate) => {
+            const start = (issuanceDate instanceof Date) ? new Date(issuanceDate) : parseSheetDate(issuanceDate);
+            if (!start) return null;
+            const d = new Date(start);
+            let counted = 0;
+            while (counted < SUSPENSION_WORKING_DAYS) {
+                d.setDate(d.getDate() + 1);
+                if (STATUS_WORKING_DAYS.includes(d.getDay())) counted++;
+            }
+            return d;
+        };
+
+        const STATUS_RANK = { terminated: 3, dnr: 3, suspended: 2, none: 0 };
+        const correctiveToStatus = (raw) => {
+            const s = (raw || '').toString().trim().toLowerCase();
+            if (!s) return null;
+            if (s.includes('dnr') || s.includes('do not return')) return 'dnr';
+            if (s.includes('termin')) return 'terminated';
+            if (s.includes('suspen')) return 'suspended';
+            return null; // "None" / blank are not blocking
+        };
+
+        // Effective status for an entry today. Returns null if not currently flagged.
+        const resolveEntryStatus = (entry, today = new Date()) => {
+            if (!entry || !entry.status || entry.status === 'none') return null;
+            if (entry.status === 'dnr' || entry.status === 'terminated') {
+                const isDnr = entry.status === 'dnr';
+                return {
+                    kind: entry.status, blocked: true, permanent: true,
+                    label: isDnr ? 'DNR' : 'TERMINATED', shortLabel: isDnr ? 'DNR' : 'TERM',
+                    className: isDnr ? 'flag-dnr' : 'flag-terminated'
+                };
+            }
+            // suspended
+            const ret = entry.returnDate ? parseSheetDate(entry.returnDate) : null;
+            const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            if (ret && todayMid >= new Date(ret.getFullYear(), ret.getMonth(), ret.getDate())) {
+                return null; // suspension already served
+            }
+            return {
+                kind: 'suspended', blocked: true, permanent: false, until: entry.returnDate,
+                label: ret ? `SUSPENDED until ${formatShortDate(ret)}` : 'SUSPENDED',
+                shortLabel: 'SUSP', className: 'flag-suspended'
+            };
+        };
+
+        // Build lookup indexes (blocking entries only) for inline matching. Keyed
+        // by name (typed) and by EID (scanned badge) so both staffing-entry styles work.
+        const buildStatusNameIndex = (statusList) => {
+            const byName = {}, byToken = {}, byEid = {};
+            Object.values(statusList || {}).forEach(entry => {
+                if (!resolveEntryStatus(entry)) return;
+                if (entry.eid) byEid[normalizeEid(entry.eid)] = entry;
+                if (entry.name) {
+                    byName[normalizeName(entry.name)] = entry;
+                    byToken[nameTokenKey(entry.name)] = entry;
+                }
+            });
+            return { byName, byToken, byEid };
+        };
+        // Accepts either a typed name or a scanned EID (a run of digits).
+        const lookupNameStatus = (index, value) => {
+            if (!index || !value) return null;
+            const raw = value.toString().trim();
+            let entry = null;
+            if (/^\d{4,}$/.test(raw.replace(/\s+/g, ''))) {
+                entry = index.byEid[normalizeEid(raw)];
+            }
+            if (!entry) entry = index.byName[normalizeName(raw)] || index.byToken[nameTokenKey(raw)];
+            return entry ? { entry, status: resolveEntryStatus(entry) } : null;
+        };
+
+        // Index of where each associate last worked, from saved staffing reports:
+        // normalized name -> { name, leads[], leadLabel, letter, date, shift }. Used to
+        // route people back to the lead they usually work for, even on a different line.
+        const buildWorkHistoryIndex = (reports) => {
+            const idx = {};
+            (reports || []).forEach(r => {
+                const date = r.date || '';
+                const shift = r.shift || '';
+                (r.lines || []).forEach(line => {
+                    const leads = (line.leads || []).filter(Boolean);
+                    if (!leads.length) return; // no lead to attribute the work to
+                    const letter = line.letter || '';
+                    (line.positions || []).forEach(p => {
+                        const nm = (p.name || '').trim();
+                        if (!nm) return;
+                        const key = normalizeName(nm);
+                        const cur = idx[key];
+                        if (!cur || date > cur.date) {
+                            idx[key] = { name: nm, leads, leadLabel: leads.join(', '), letter, date, shift };
+                        }
+                    });
+                });
+            });
+            return idx;
+        };
+        const lookupWorkHistory = (index, name) => {
+            if (!index || !name) return null;
+            return index[normalizeName(name)] || null;
+        };
+
+        // Resolve normalized records (one or more per EID) into an EID-keyed
+        // status list. DNR/Termination outrank suspensions; ties break to the
+        // most recent date. Shared by the manual upload and the SharePoint sync.
+        const resolveStatusRecords = (records, earlyLeaves) => {
+            const resolved = {};
+            records.forEach(rec => {
+                const cur = resolved[rec.eid];
+                const recRank = STATUS_RANK[rec.status] || 0;
+                if (!cur) { resolved[rec.eid] = { ...rec }; return; }
+                const curRank = STATUS_RANK[cur.status] || 0;
+                if (recRank > curRank || (recRank === curRank && (rec.date || '') >= (cur.date || ''))) {
+                    resolved[rec.eid] = { ...rec, name: rec.name || cur.name };
+                } else if (!cur.name && rec.name) {
+                    cur.name = rec.name;
+                }
+            });
+            const statusList = {};
+            Object.keys(resolved).forEach(eid => {
+                const e = resolved[eid];
+                const out = {
+                    eid, name: e.name || (earlyLeaves[eid] && earlyLeaves[eid].name) || '',
+                    status: e.status, offense: e.offense || '', issuedDate: e.date || '',
+                    earlyLeaveCount: earlyLeaves[eid] ? earlyLeaves[eid].count : 0
+                };
+                if (e.status === 'suspended') out.returnDate = toISODate(computeSuspensionReturn(e.date));
+                statusList[eid] = out;
+            });
+            // EIDs with only early leaves (informational, not blocking).
+            Object.keys(earlyLeaves).forEach(eid => {
+                if (statusList[eid]) return;
+                statusList[eid] = {
+                    eid, name: earlyLeaves[eid].name, status: 'none',
+                    earlyLeaveCount: earlyLeaves[eid].count, issuedDate: earlyLeaves[eid].lastDate
+                };
+            });
+            return statusList;
+        };
+
+        // Resolve the raw { submissions, corrective } payload (the canonical shape
+        // written by both the Power Automate sync and the manual upload) into a
+        // status list + meta. Field names match SYNC-AND-AUTH-SETUP.md.
+        const resolveStatusRaw = (raw) => {
+            const submissions = (raw && Array.isArray(raw.submissions)) ? raw.submissions : [];
+            const corrective = (raw && Array.isArray(raw.corrective)) ? raw.corrective : [];
+            const records = [];
+            const earlyLeaves = {};
+            // Tolerant field lookup: accept the clean names from the Power Automate
+            // Select step OR the original Excel header names, case/spacing-insensitive.
+            const pick = (row, ...names) => {
+                const lk = {};
+                Object.keys(row || {}).forEach(k => { lk[k.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[k]; });
+                for (const n of names) {
+                    const key = n.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (lk[key] != null && lk[key] !== '') return lk[key];
+                }
+                return '';
+            };
+            const ingest = (row, isSubmission) => {
+                const eid = normalizeEid(pick(row, 'eid', 'employeeid', 'badgeid'));
+                if (!eid) return;
+                const name = (pick(row, 'name', 'associatename') || '').toString().trim();
+                const isoDate = toISODate(parseSheetDate(pick(row, 'date')));
+                const status = correctiveToStatus(pick(row, 'action', 'correctiveaction'));
+                if (status) {
+                    const offense = (pick(row, 'offense', 'offensecategory', 'reason', 'category') || '').toString().trim();
+                    records.push({ eid, name, status, date: isoDate, offense });
+                } else if (isSubmission) {
+                    const timeLeft = (pick(row, 'timeleft') || '').toString().trim();
+                    const category = (pick(row, 'category') || '').toString().trim();
+                    if (timeLeft || category) {
+                        const el = earlyLeaves[eid] || { count: 0, name: '', lastDate: '' };
+                        el.count += 1;
+                        if (name) el.name = name;
+                        if (isoDate > el.lastDate) el.lastDate = isoDate;
+                        earlyLeaves[eid] = el;
+                    }
+                }
+            };
+            submissions.forEach(r => ingest(r, true));
+            corrective.forEach(r => ingest(r, false));
+            const statusList = resolveStatusRecords(records, earlyLeaves);
+            const blockingCount = Object.values(statusList).filter(e => resolveEntryStatus(e)).length;
+            return {
+                statusList,
+                meta: {
+                    updatedAt: (raw && raw.updatedAt) || new Date().toISOString(),
+                    source: (raw && raw.source) || 'sharepoint-sync',
+                    totalEntries: Object.keys(statusList).length,
+                    blockingCount
+                }
+            };
+        };
+
+        // Parse the manually-uploaded SharePoint workbook into the same raw
+        // { submissions, corrective } shape the Power Automate sync writes, so both
+        // ingestion paths funnel through resolveStatusRaw.
+        const parseStatusWorkbook = (file) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const wb = XLSX.read(data, { type: 'array' });
+                        const findHeader = (headers, ...wanted) => {
+                            const norm = headers.map(h => (h || '').toString().toLowerCase().replace(/[^a-z0-9]/g, ''));
+                            for (const w of wanted) {
+                                const wn = w.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                const idx = norm.findIndex(h => h === wn || h.startsWith(wn));
+                                if (idx !== -1) return headers[idx];
+                            }
+                            return null;
+                        };
+
+                        const submissions = [];
+                        const corrective = [];
+
+                        wb.SheetNames.forEach(sheetName => {
+                            const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+                            if (!rows.length) return;
+                            const headers = Object.keys(rows[0]);
+                            const eidKey = findHeader(headers, 'eid', 'employeeid', 'badgeid', 'badge');
+                            if (!eidKey) return; // not a sheet we understand
+                            const nameKey = findHeader(headers, 'associatename', 'name');
+                            const caKey = findHeader(headers, 'correctiveaction');
+                            const dateKey = findHeader(headers, 'date');
+                            const offenseKey = findHeader(headers, 'offensecategory');
+                            const reasonKey = findHeader(headers, 'reason');
+                            const timeLeftKey = findHeader(headers, 'timeleft');
+                            const categoryKey = findHeader(headers, 'category');
+                            const isSubmissionSheet = !!timeLeftKey; // event log has a "Time Left" column
+                            const get = (row, key) => (key ? (row[key] || '').toString() : '');
+
+                            rows.forEach(row => {
+                                if (!normalizeEid(row[eidKey])) return;
+                                const base = {
+                                    eid: get(row, eidKey),
+                                    name: get(row, nameKey),
+                                    action: get(row, caKey),
+                                    date: get(row, dateKey)
+                                };
+                                if (isSubmissionSheet) {
+                                    submissions.push({ ...base, category: get(row, categoryKey), reason: get(row, reasonKey), timeLeft: get(row, timeLeftKey) });
+                                } else {
+                                    corrective.push({ ...base, offense: get(row, offenseKey) });
+                                }
+                            });
+                        });
+
+                        if (!submissions.length && !corrective.length) {
+                            reject(new Error('No EID data found. Check that the file has an "EID" column.'));
+                            return;
+                        }
+
+                        const raw = { submissions, corrective, updatedAt: new Date().toISOString(), source: 'manual-upload', fileName: file.name };
+                        resolve({ raw, meta: resolveStatusRaw(raw).meta });
+                    } catch (err) {
+                        reject(new Error('Failed to parse status file: ' + err.message));
+                    }
+                };
+                reader.onerror = () => reject(new Error('Failed to read file'));
+                reader.readAsArrayBuffer(file);
+            });
+        };
+
         function App() {
             const [activeTab, setActiveTab] = useState('setup');
             const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
@@ -1199,6 +1600,9 @@
             const [shiftModalDraft, setShiftModalDraft] = useState('1st');
             const importInputRef = useRef(null);
             const [importStatus, setImportStatus] = useState('');
+            const [statusList, setStatusList] = useState({});
+            const [statusMeta, setStatusMeta] = useState(null);
+            const [workHistoryIndex, setWorkHistoryIndex] = useState({});
             const saveTimeoutRef = useRef(null);
             const savingRef = useRef(false);
             const undoTimerRef = useRef(null);
@@ -1250,6 +1654,117 @@
                     });
                 }
             }, [coreAssociates, lineLeadNotes]);
+
+            // Load associate status (suspensions / DNR / early leaves). The canonical
+            // source is the raw `statusRaw` node (written daily by the SharePoint sync
+            // or by a manual upload); it's resolved into a status list client-side so
+            // the precedence + return-date logic lives in one place. localStorage
+            // caches the resolved list for offline use.
+            useEffect(() => {
+                const applyRaw = (rawVal, metaVal) => {
+                    const { statusList: resolved, meta } = resolveStatusRaw(rawVal);
+                    const effectiveMeta = metaVal || meta;
+                    setStatusList(resolved);
+                    setStatusMeta(effectiveMeta);
+                    storage.save('statusList', resolved);
+                    storage.save('statusMeta', effectiveMeta);
+                };
+                const loadStatus = async () => {
+                    if (isFirebaseConfigured && db) {
+                        try {
+                            const [rawSnap, metaSnap] = await Promise.all([
+                                db.ref('statusRaw').once('value'),
+                                db.ref('statusMeta').once('value')
+                            ]);
+                            const metaVal = metaSnap.exists() ? metaSnap.val() : null;
+                            if (rawSnap.exists()) {
+                                applyRaw(rawSnap.val(), metaVal);
+                                console.log('Loaded status from Firebase (statusRaw)');
+                                return;
+                            }
+                            // Legacy: a pre-resolved statusList from an older build.
+                            const listSnap = await db.ref('statusList').once('value');
+                            if (listSnap.exists()) {
+                                setStatusList(listSnap.val() || {});
+                                setStatusMeta(metaVal);
+                                storage.save('statusList', listSnap.val() || {});
+                                storage.save('statusMeta', metaVal);
+                                return;
+                            }
+                        } catch (error) {
+                            console.error('Error loading status from Firebase:', error);
+                        }
+                    }
+                    setStatusList(storage.load('statusList', {}));
+                    setStatusMeta(storage.load('statusMeta', null));
+                };
+                loadStatus();
+                // Keep in sync if the daily sync (or another device) updates Firebase.
+                if (isFirebaseConfigured && db) {
+                    const rawRef = db.ref('statusRaw');
+                    const rawHandler = rawRef.on('value', (snap) => {
+                        if (snap.exists()) {
+                            const { statusList: resolved } = resolveStatusRaw(snap.val());
+                            setStatusList(resolved);
+                            storage.save('statusList', resolved);
+                        }
+                    });
+                    const metaRef = db.ref('statusMeta');
+                    const metaHandler = metaRef.on('value', (snap) => {
+                        const v = snap.exists() ? snap.val() : null;
+                        setStatusMeta(v);
+                        storage.save('statusMeta', v);
+                    });
+                    return () => { rawRef.off('value', rawHandler); metaRef.off('value', metaHandler); };
+                }
+            }, []);
+
+            const statusNameIndex = React.useMemo(() => buildStatusNameIndex(statusList), [statusList]);
+
+            // Curated autocomplete list for name slots: every associate we know from
+            // the core team plus everyone seen in past staffing reports. Deduped
+            // case/spacing-insensitively so the same name doesn't appear twice;
+            // the core-team spelling wins since it's added first.
+            const knownNames = React.useMemo(() => {
+                const byKey = new Map(); // normalizeName -> display name
+                const add = (name) => {
+                    const n = (name || '').toString().trim();
+                    const key = normalizeName(n);
+                    if (key && !byKey.has(key)) byKey.set(key, n);
+                };
+                Object.values(coreAssociates || {}).forEach(list =>
+                    (list || []).forEach(a => add(a && a.name)));
+                Object.values(workHistoryIndex || {}).forEach(h => add(h && h.name));
+                return Array.from(byKey.values())
+                    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+            }, [coreAssociates, workHistoryIndex]);
+
+            // Load saved staffing reports once to build the "last lead worked for" index.
+            useEffect(() => {
+                const loadHistory = async () => {
+                    const reportsList = [];
+                    const seen = new Set();
+                    if (isFirebaseConfigured && db) {
+                        try {
+                            const snap = await db.ref('staffing').once('value');
+                            if (snap.exists()) {
+                                const data = snap.val();
+                                Object.keys(data).forEach(id => { reportsList.push(data[id]); seen.add(id); });
+                            }
+                        } catch (e) { console.error('Error loading staffing history:', e); }
+                    }
+                    Object.keys(localStorage)
+                        .filter(k => k.startsWith('staffing_') && !k.includes('coreAssociates'))
+                        .forEach(k => {
+                            const d = storage.load(k);
+                            if (!d || !d.date) return;
+                            const id = `${d.date}_${d.shift}`;
+                            if (!seen.has(id)) { reportsList.push(d); seen.add(id); }
+                        });
+                    setWorkHistoryIndex(buildWorkHistoryIndex(reportsList));
+                };
+                loadHistory();
+            }, []);
 
             // Auto-save functionality
             useEffect(() => {
@@ -1371,6 +1886,23 @@
 
             const handleImportClick = () => {
                 importInputRef.current?.click();
+            };
+
+            // Manual upload of the SharePoint tracking workbook. Writes the same
+            // canonical `statusRaw` node the Power Automate sync writes, so a later
+            // sync and a manual upload can't disagree about the source of truth.
+            const handleStatusUpload = async (file) => {
+                const { raw, meta } = await parseStatusWorkbook(file);
+                if (isFirebaseConfigured && db) {
+                    await db.ref('statusRaw').set(raw);
+                    await db.ref('statusMeta').set(meta);
+                }
+                const { statusList: resolved } = resolveStatusRaw(raw);
+                storage.save('statusList', resolved);
+                storage.save('statusMeta', meta);
+                setStatusList(resolved);
+                setStatusMeta(meta);
+                return meta;
             };
 
             const handleImportFile = async (e) => {
@@ -1874,6 +2406,10 @@
             };
 
             const handleExport = () => {
+                // Match the staffing screen's name-display preference (Last, First).
+                const lastFirst = storage.load('nameDisplayLastFirst', false);
+                const fmtName = (n) => lastFirst ? formatLastFirst(n) : n;
+
                 // Create workbook
                 const wb = XLSX.utils.book_new();
 
@@ -1935,7 +2471,7 @@
                         const nonCrescentPositions = line.positions.filter(p => !p.isCrescent);
                         const position = nonCrescentPositions[i];
                         if (position) {
-                            const name = position.name || '';
+                            const name = fmtName(position.name || '');
                             const marker = position.isNew ? ' ⭐' : '';
                             row.push(name + marker);
                         } else {
@@ -1948,7 +2484,7 @@
                     const waitlistItem = waitlist[i];
                     if (waitlistItem) {
                         const marker = waitlistItem.isNew ? ' ⭐' : '';
-                        row.push((waitlistItem.name || '') + marker);
+                        row.push(fmtName(waitlistItem.name || '') + marker);
                     } else {
                         row.push('');
                     }
@@ -2244,6 +2780,12 @@
                             >
                                 Analytics
                             </button>
+                            <button
+                                className={`tab ${activeTab === 'status' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('status')}
+                            >
+                                Badge Check
+                            </button>
                         </div>
 
                         {activeTab === 'setup' && (
@@ -2284,6 +2826,10 @@
                                 onDrop={handleDrop}
                                 setLines={setLines}
                                 setWaitlist={setWaitlist}
+                                statusNameIndex={statusNameIndex}
+                                workHistoryIndex={workHistoryIndex}
+                                knownNames={knownNames}
+                                statusList={statusList}
                             />
                         )}
 
@@ -2300,6 +2846,15 @@
 
                         {activeTab === 'analytics' && (
                             <AnalyticsView />
+                        )}
+
+                        {activeTab === 'status' && (
+                            <StatusView
+                                statusList={statusList}
+                                statusMeta={statusMeta}
+                                onUpload={handleStatusUpload}
+                                workHistoryIndex={workHistoryIndex}
+                            />
                         )}
 
                         {activeTab === 'core' && (
@@ -2345,7 +2900,11 @@
             onDragOver,
             onDrop,
             setLines,
-            setWaitlist
+            setWaitlist,
+            statusNameIndex,
+            workHistoryIndex,
+            knownNames,
+            statusList
         }) {
             const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
             const [quickAddInput, setQuickAddInput] = useState('');
@@ -2354,7 +2913,56 @@
             const [selectMode, setSelectMode] = useState(false);
             const [selectedPositions, setSelectedPositions] = useState([]);
             const [selectedWaitlist, setSelectedWaitlist] = useState([]);
+            const [lastFirst, setLastFirst] = useState(() => storage.load('nameDisplayLastFirst', false));
+            const [focusedWaitlistId, setFocusedWaitlistId] = useState(null);
+            const [scanMode, setScanMode] = useState(false);
+            const [scanInput, setScanInput] = useState('');
+            const [scanFeedback, setScanFeedback] = useState(null);
             const quickAddInputRef = useRef(null);
+            const scanModeRef = useRef(null);
+
+            // Scan a badge into the waitlist: resolve EID -> name + status, queue them.
+            const handleScanSubmit = () => {
+                const eid = normalizeEid(scanInput);
+                setScanInput('');
+                if (!eid) return;
+                const entry = (statusList || {})[eid];
+                const status = entry ? resolveEntryStatus(entry) : null;
+                const name = (entry && entry.name) ? entry.name : eid;
+                onQuickAddWaitlist([name]);
+                setScanFeedback({
+                    eid,
+                    name: (entry && entry.name) || '(not on file)',
+                    cls: status ? (status.kind === 'suspended' ? 'suspend' : 'block') : (entry ? 'clear' : 'unknown'),
+                    headline: status ? status.label : (entry ? 'OK TO WORK' : 'NOT ON LIST'),
+                    added: name
+                });
+                scanModeRef.current?.focus();
+            };
+            useEffect(() => { if (scanMode) scanModeRef.current?.focus(); }, [scanMode]);
+
+            const toggleLastFirst = () => setLastFirst(v => {
+                const nv = !v;
+                storage.save('nameDisplayLastFirst', nv);
+                return nv;
+            });
+
+            // Sort each line's names alphabetically by last name. Keeps blanks at the
+            // bottom and keeps Crescent positions grouped (sorted within their group).
+            const handleAlphabetize = () => {
+                const sortFn = (a, b) => {
+                    const an = (a.name || '').trim(), bn = (b.name || '').trim();
+                    if (!an && !bn) return 0;
+                    if (!an) return 1;
+                    if (!bn) return -1;
+                    return lastNameKey(an).localeCompare(lastNameKey(bn)) || an.localeCompare(bn);
+                };
+                setLines(prev => prev.map(line => {
+                    const regular = line.positions.filter(p => !p.isCrescent).sort(sortFn);
+                    const crescent = line.positions.filter(p => p.isCrescent).sort(sortFn);
+                    return { ...line, positions: [...regular, ...crescent] };
+                }));
+            };
 
             useEffect(() => {
                 if (isQuickAddOpen && quickAddInputRef.current) {
@@ -2504,6 +3112,9 @@
 
             return (
                 <>
+                    <datalist id="known-associate-names">
+                        {(knownNames || []).map(n => <option key={n} value={n} />)}
+                    </datalist>
                     <div className="print-header">Crescent Staffing Planner - {currentDate} - {currentShift} Shift</div>
 
                     {!isFirebaseConfigured && (
@@ -2543,6 +3154,23 @@
                             {waitlist.filter(w => w.name.trim()).length > 0 && <span style={{ marginLeft: '12px', color: '#f59e0b' }}>• {waitlist.filter(w => w.name.trim()).length} waiting</span>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                                className={`btn ${lastFirst ? 'btn-primary' : 'btn-secondary'}`}
+                                onClick={toggleLastFirst}
+                                title="Toggle name display between First Last and Last, First"
+                                style={{ fontSize: '12px', padding: '6px 12px' }}
+                            >
+                                {lastFirst ? 'Last, First' : 'First Last'}
+                            </button>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={handleAlphabetize}
+                                disabled={isLocked}
+                                title="Sort each line's names alphabetically by last name"
+                                style={{ fontSize: '12px', padding: '6px 12px', opacity: isLocked ? 0.5 : 1 }}
+                            >
+                                Sort A–Z
+                            </button>
                             <button
                                 className={`btn ${selectMode ? 'btn-primary' : 'btn-secondary'}`}
                                 onClick={() => { setSelectMode(!selectMode); handleDeselectAll(); }}
@@ -2589,6 +3217,9 @@
                                     onDragStart={selectMode ? (e) => e.preventDefault() : onDragStart}
                                     onDragOver={onDragOver}
                                     onDrop={onDrop}
+                                    statusNameIndex={statusNameIndex}
+                                    workHistoryIndex={workHistoryIndex}
+                                    lastFirst={lastFirst}
                                 />
                             ))}
                             <div className="line-column" style={{ minWidth: '120px', width: '120px', justifyContent: 'center', alignItems: 'center', cursor: isLocked ? 'not-allowed' : 'pointer', background: '#f9fafb', opacity: isLocked ? 0.5 : 1 }} onClick={isLocked ? null : onAddLine}>
@@ -2608,6 +3239,15 @@
                                 WAITLIST ({waitlist.filter(w => w.name.trim()).length})
                                 <div style={{ display: 'flex', gap: '4px', marginLeft: '8px' }}>
                                     <button
+                                        className={`btn btn-small ${scanMode ? 'btn-primary' : 'btn-secondary'}`}
+                                        onClick={() => { setScanMode(s => !s); setScanFeedback(null); }}
+                                        disabled={isLocked}
+                                        title="Scan badges to add associates to the waitlist"
+                                        style={{ fontSize: '11px', opacity: isLocked ? 0.5 : 1 }}
+                                    >
+                                        {scanMode ? 'Exit Scan' : '🔎 Scan'}
+                                    </button>
+                                    <button
                                         className="btn btn-primary btn-small"
                                         onClick={() => setIsQuickAddOpen(true)}
                                         disabled={isLocked}
@@ -2625,6 +3265,30 @@
                                     </button>
                                 </div>
                             </div>
+                            {scanMode && (
+                                <div style={{ padding: '8px', borderBottom: '1px solid #e5e7eb', background: '#f8faff' }}>
+                                    <input
+                                        ref={scanModeRef}
+                                        type="text"
+                                        className="scan-input"
+                                        style={{ fontSize: '16px', padding: '10px' }}
+                                        value={scanInput}
+                                        onChange={(e) => setScanInput(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleScanSubmit(); }}
+                                        placeholder="Scan badge → adds to waitlist"
+                                        inputMode="numeric"
+                                        autoComplete="off"
+                                        disabled={isLocked}
+                                    />
+                                    {scanFeedback && (
+                                        <div className={`scan-banner ${scanFeedback.cls}`} style={{ marginTop: '8px', padding: '10px' }}>
+                                            <div className="scan-name" style={{ fontSize: '15px' }}>{scanFeedback.name}</div>
+                                            <div className="scan-status" style={{ fontSize: '13px' }}>{scanFeedback.headline}</div>
+                                            <div className="scan-detail">EID {scanFeedback.eid} · added “{scanFeedback.added}” to waitlist</div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <div style={{ padding: '4px 6px' }}>
                                 <input
                                     type="text"
@@ -2636,7 +3300,10 @@
                                 />
                             </div>
                             <div className="waitlist-items">
-                                {filteredWaitlist.map((item, idx) => (
+                                {filteredWaitlist.map((item, idx) => {
+                                  const wStatus = lookupNameStatus(statusNameIndex, item.name);
+                                  const wHistory = lookupWorkHistory(workHistoryIndex, item.name);
+                                  return (
                                     <div
                                         key={item.id}
                                         className="waitlist-item"
@@ -2659,11 +3326,20 @@
                                         <input
                                             type="text"
                                             className="waitlist-input"
-                                            value={item.name}
+                                            list="known-associate-names"
+                                            value={(lastFirst && focusedWaitlistId !== item.id) ? formatLastFirst(item.name) : item.name}
                                             onChange={(e) => onUpdateWaitlistItem(item.id, e.target.value, item.isNew)}
+                                            onFocus={() => setFocusedWaitlistId(item.id)}
+                                            onBlur={() => setFocusedWaitlistId(null)}
                                             placeholder="Type name..."
                                             disabled={isLocked}
                                         />
+                                        {wStatus && wStatus.status && (
+                                            <span className={`status-pill ${wStatus.status.className}`} title={wStatus.status.label}>{wStatus.status.shortLabel}</span>
+                                        )}
+                                        {wHistory && (
+                                            <span className="lead-hint" title={`Last worked for ${wHistory.leadLabel} on ${wHistory.date} (Line ${wHistory.letter})`}>↳ {wHistory.leadLabel}</span>
+                                        )}
                                         <div className="waitlist-controls">
                                             <input
                                                 type="checkbox"
@@ -2683,7 +3359,8 @@
                                             </button>
                                         </div>
                                     </div>
-                                ))}
+                                  );
+                                })}
                                 {filteredWaitlist.length === 0 && (
                                     <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '12px' }}>
                                         {waitlistSearch ? 'No matches' : 'No one waiting'}
@@ -2794,7 +3471,8 @@
             );
         }
 
-        function LineColumn({ line, isLocked, coreAssociates, selectMode, selectedPositions, onTogglePositionSelect, onUpdatePosition, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop }) {
+        function LineColumn({ line, isLocked, coreAssociates, selectMode, selectedPositions, onTogglePositionSelect, onUpdatePosition, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop, statusNameIndex, workHistoryIndex, lastFirst }) {
+            const [focusedId, setFocusedId] = useState(null);
             const [isEditing, setIsEditing] = useState(false);
             const [editLetter, setEditLetter] = useState(line.letter);
             const [editLeads, setEditLeads] = useState((line.leads || []).join(', '));
@@ -3077,6 +3755,10 @@
                             const crescentIndex = position.isCrescent
                                 ? line.positions.slice(0, index).filter(p => p.isCrescent).length + 1
                                 : null;
+                            const posStatus = lookupNameStatus(statusNameIndex, position.name);
+                            const leadHint = lookupWorkHistory(workHistoryIndex, position.name);
+                            const leadDiff = leadHint && !(line.leads || []).some(l =>
+                                leadHint.leads.some(hl => normalizeName(hl) === normalizeName(l)));
 
                             return (
                                 <React.Fragment key={position.id}>
@@ -3103,14 +3785,27 @@
                                         <div className="position-number" style={position.isCrescent ? { color: '#831843' } : {}}>
                                             {position.isCrescent ? `C${crescentIndex}` : index + 1}
                                         </div>
-                                        <input
-                                            type="text"
-                                            className="position-input"
-                                            value={position.name}
-                                            onChange={(e) => onUpdatePosition(line.id, position.id, e.target.value, position.isNew)}
-                                            placeholder="Name..."
-                                            disabled={line.isCut || isLocked}
-                                        />
+                                        <div className="position-main">
+                                            <input
+                                                type="text"
+                                                className="position-input"
+                                                list="known-associate-names"
+                                                value={(lastFirst && focusedId !== position.id) ? formatLastFirst(position.name) : position.name}
+                                                onChange={(e) => onUpdatePosition(line.id, position.id, e.target.value, position.isNew)}
+                                                onFocus={() => setFocusedId(position.id)}
+                                                onBlur={() => setFocusedId(null)}
+                                                placeholder="Name..."
+                                                disabled={line.isCut || isLocked}
+                                            />
+                                            {leadHint && (
+                                                <div className={`lead-hint ${leadDiff ? 'diff' : ''}`} title={`Last worked for ${leadHint.leadLabel} on ${leadHint.date} (Line ${leadHint.letter})`}>
+                                                    ↳ {leadHint.leadLabel}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {posStatus && posStatus.status && (
+                                            <span className={`status-pill ${posStatus.status.className}`} title={posStatus.status.label}>{posStatus.status.shortLabel}</span>
+                                        )}
                                         <div className="position-checkbox">
                                             <input
                                                 type="checkbox"
@@ -3558,6 +4253,159 @@
                 reader.readAsArrayBuffer(file);
             });
         };
+
+        // Badge Check: scan an EID to instantly see suspension / DNR status,
+        // upload the daily SharePoint workbook, and browse all flagged associates.
+        function StatusView({ statusList, statusMeta, onUpload, workHistoryIndex }) {
+            const [scanValue, setScanValue] = useState('');
+            const [scanResult, setScanResult] = useState(null);
+            const [recentScans, setRecentScans] = useState([]);
+            const [search, setSearch] = useState('');
+            const [uploadStatus, setUploadStatus] = useState('');
+            const scanRef = useRef(null);
+            const fileRef = useRef(null);
+
+            useEffect(() => { scanRef.current?.focus(); }, []);
+
+            const handleScan = () => {
+                const eid = normalizeEid(scanValue);
+                setScanValue('');
+                scanRef.current?.focus();
+                if (!eid) { setScanResult(null); return; }
+                const entry = statusList[eid];
+                const status = entry ? resolveEntryStatus(entry) : null;
+                let banner;
+                if (status && (status.kind === 'dnr' || status.kind === 'terminated')) {
+                    banner = { cls: 'block', eid, name: entry.name, headline: status.label,
+                        detail: entry.offense ? `Offense: ${entry.offense}` : '' };
+                } else if (status && status.kind === 'suspended') {
+                    banner = { cls: 'suspend', eid, name: entry.name, headline: status.label,
+                        detail: entry.offense ? `Offense: ${entry.offense}` : '' };
+                } else if (entry) {
+                    const note = entry.earlyLeaveCount ? `${entry.earlyLeaveCount} early-leave event(s) on record` : 'No active flags';
+                    banner = { cls: 'clear', eid, name: entry.name || '(name not on file)', headline: 'OK TO WORK', detail: note };
+                } else {
+                    banner = { cls: 'unknown', eid, name: '', headline: 'NOT ON LIST', detail: 'No record for this badge — OK to work.' };
+                }
+                // Surface the lead they last worked for, to route them consistently.
+                const history = entry && entry.name ? lookupWorkHistory(workHistoryIndex, entry.name) : null;
+                if (history) banner.lastLead = `${history.leadLabel} (${history.date}, Line ${history.letter})`;
+                setScanResult(banner);
+                setRecentScans(prev => [{ ...banner, t: Date.now() }, ...prev].slice(0, 8));
+            };
+
+            const handleFile = async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                e.target.value = '';
+                try {
+                    setUploadStatus('Parsing...');
+                    const meta = await onUpload(file);
+                    setUploadStatus(`Loaded ${meta.totalEntries} associates (${meta.blockingCount} flagged) ✓`);
+                    setTimeout(() => setUploadStatus(''), 5000);
+                } catch (err) {
+                    console.error('Status upload error:', err);
+                    setUploadStatus(`Error: ${err.message}`);
+                    setTimeout(() => setUploadStatus(''), 7000);
+                }
+            };
+
+            const entries = Object.values(statusList || {});
+            const flagged = entries
+                .map(e => ({ entry: e, status: resolveEntryStatus(e) }))
+                .filter(x => x.status)
+                .sort((a, b) => (STATUS_RANK[b.status.kind] - STATUS_RANK[a.status.kind]) ||
+                    (a.entry.name || '').localeCompare(b.entry.name || ''));
+            const q = search.trim().toLowerCase();
+            const visible = q
+                ? flagged.filter(x => (x.entry.name || '').toLowerCase().includes(q) || x.entry.eid.includes(q))
+                : flagged;
+
+            const lastUpdated = statusMeta && statusMeta.updatedAt ? new Date(statusMeta.updatedAt) : null;
+            const stale = lastUpdated ? (Date.now() - lastUpdated.getTime() > 36 * 3600 * 1000) : false;
+
+            return (
+                <div>
+                    <div className="scan-box">
+                        <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '8px' }}>🔎 Scan badge or type EID</div>
+                        <input
+                            ref={scanRef}
+                            className="scan-input"
+                            value={scanValue}
+                            onChange={(e) => setScanValue(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleScan(); }}
+                            placeholder="Scan badge…"
+                            inputMode="numeric"
+                            autoComplete="off"
+                        />
+                        {scanResult && (
+                            <div className={`scan-banner ${scanResult.cls}`}>
+                                {scanResult.name && <div className="scan-name">{scanResult.name}</div>}
+                                <div className="scan-status">{scanResult.headline}</div>
+                                <div className="scan-detail">EID {scanResult.eid}{scanResult.detail ? ` · ${scanResult.detail}` : ''}</div>
+                                {scanResult.lastLead && <div className="scan-detail">↳ Usually works for: <strong>{scanResult.lastLead}</strong></div>}
+                            </div>
+                        )}
+                        {recentScans.length > 0 && (
+                            <div style={{ marginTop: '10px', fontSize: '11px', color: '#6b7280' }}>
+                                Recent: {recentScans.map((s, i) => (
+                                    <span key={s.t + '_' + i} style={{ marginRight: '10px' }}>
+                                        {s.eid} <strong style={{ color: s.cls === 'block' ? '#991b1b' : s.cls === 'suspend' ? '#9a3412' : s.cls === 'clear' ? '#166534' : '#6b7280' }}>{s.headline.split(' ')[0]}</strong>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="filter-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div className="status-meta-line" style={{ margin: 0 }}>
+                            {lastUpdated ? (
+                                <>Status list updated <strong>{lastUpdated.toLocaleString()}</strong>
+                                {statusMeta.source ? ` · ${statusMeta.source}` : ''}
+                                {` · ${entries.length} on file, ${flagged.length} flagged`}
+                                {stale && <span style={{ color: '#b45309', fontWeight: 700 }}> · ⚠ may be out of date</span>}</>
+                            ) : 'No status list loaded yet — upload the tracking sheet or check the daily sync.'}
+                        </div>
+                        <div>
+                            <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ display: 'none' }} />
+                            <button className="btn btn-primary" onClick={() => fileRef.current?.click()}>Upload Tracking Sheet</button>
+                            {uploadStatus && (
+                                <span style={{ marginLeft: '10px', fontSize: '12px', color: uploadStatus.startsWith('Error') ? '#ef4444' : '#10b981' }}>{uploadStatus}</span>
+                            )}
+                        </div>
+                    </div>
+
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search flagged associates by name or EID…"
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '13px', marginBottom: '8px' }}
+                    />
+                    <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '6px' }}>
+                        {flagged.length} active flag{flagged.length !== 1 ? 's' : ''}
+                    </div>
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: '6px', overflow: 'hidden' }}>
+                        {visible.length === 0 ? (
+                            <div style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>
+                                {flagged.length === 0 ? 'No suspensions or DNRs on file.' : 'No matches.'}
+                            </div>
+                        ) : visible.map(({ entry, status }) => (
+                            <div className="status-row" key={entry.eid}>
+                                <span className={`flag-badge ${status.className}`} style={{ minWidth: '64px', textAlign: 'center' }}>{status.shortLabel}</span>
+                                <span style={{ flex: 1, fontWeight: 600 }}>{entry.name || '(no name)'}</span>
+                                <span style={{ color: '#6b7280', width: '90px' }}>EID {entry.eid}</span>
+                                <span style={{ color: '#6b7280', flex: 1 }}>
+                                    {status.kind === 'suspended' && entry.returnDate
+                                        ? `Issued ${formatShortDate(entry.issuedDate)} · Returns ${formatShortDate(entry.returnDate)}`
+                                        : (entry.offense || '')}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
 
         function ReportingView({ onLoadShift }) {
             const [reports, setReports] = useState([]);
