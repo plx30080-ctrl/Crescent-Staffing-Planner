@@ -1351,9 +1351,17 @@
         const parseSheetDate = (v) => {
             if (v == null || v === '') return null;
             if (v instanceof Date) return isNaN(v) ? null : v;
-            if (typeof v === 'number') { // Excel serial date
-                const d = new Date(Math.round((v - 25569) * 86400 * 1000));
-                return isNaN(d) ? null : d;
+            // Excel serial date. Power Automate's Excel connector sends date cells as
+            // serials — sometimes as numbers, sometimes as numeric STRINGS (e.g. "46177"
+            // = 2026-06-04). Decode both; otherwise new Date("46177") yields garbage.
+            const serial = (typeof v === 'number') ? v
+                : (/^\d+(\.\d+)?$/.test(v.toString().trim()) ? Number(v.toString().trim()) : NaN);
+            if (!isNaN(serial) && serial >= 20000 && serial <= 80000) {
+                const d = new Date(Math.round((serial - 25569) * 86400 * 1000));
+                if (isNaN(d)) return null;
+                // d is UTC midnight; rebuild as a LOCAL date so the calendar day is
+                // correct in negative-offset timezones (avoids an off-by-one).
+                return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
             }
             const s = v.toString().trim();
             const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
