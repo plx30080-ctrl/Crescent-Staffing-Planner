@@ -91,6 +91,18 @@
             background: rgba(255,255,255,0.3);
         }
 
+        /* The staffing toolbar sits on a light bar, but .btn-secondary is styled
+           white-on-translucent for the purple header — invisible here. Give the
+           toolbar buttons real contrast so Scan Badge / First Last / Sort A–Z /
+           Select / Lock are readable. */
+        .stats-bar .btn-secondary {
+            background: #eef1f5;
+            color: #374151;
+            border: 1px solid #d1d5db;
+        }
+        .stats-bar .btn-secondary:hover { background: #e2e6ec; }
+        .stats-bar .btn-primary { border: 1px solid #c7d2fe; }
+
         .btn-success {
             background: #10b981;
             color: white;
