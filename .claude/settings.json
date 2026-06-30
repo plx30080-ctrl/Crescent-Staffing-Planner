@@ -8,7 +8,15 @@
       "Bash(sed -n '1190,5460p' /Users/Cody.Hale/ThinkHale/Crescent-Staffing-Planner/index.html)",
       "Bash(node check.js)",
       "Bash(./node_modules/.bin/eslint --version)",
-      "Bash(ESLINT_USE_FLAT_CONFIG=false ./node_modules/.bin/eslint app.jsx -c .eslintrc.json --no-eslintrc)"
+      "Bash(ESLINT_USE_FLAT_CONFIG=false ./node_modules/.bin/eslint app.jsx -c .eslintrc.json --no-eslintrc)",
+      "Bash(git fetch *)",
+      "Bash(xargs git log --oneline -1)",
+      "Bash(grep -n *)",
+      "Bash(grep -nc *)",
+      "Bash(ESLINT_USE_FLAT_CONFIG=false ./node_modules/.bin/eslint app.jsx)",
+      "Bash(git add *)",
+      "Bash(git commit --no-verify -m ' *)",
+      "Bash(sort -t: -k1 -n)"
     ]
   }
 }
