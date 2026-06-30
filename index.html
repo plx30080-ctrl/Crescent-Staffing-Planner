@@ -1424,8 +1424,21 @@
             // suspended
             const ret = entry.returnDate ? parseSheetDate(entry.returnDate) : null;
             const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            if (ret && todayMid >= new Date(ret.getFullYear(), ret.getMonth(), ret.getDate())) {
-                return null; // suspension already served
+            if (ret) {
+                const retMid = new Date(ret.getFullYear(), ret.getMonth(), ret.getDate());
+                if (todayMid >= retMid) return null; // suspension already served
+                // A 5-working-day suspension can't return more than ~2 weeks out. A
+                // return far in the future means a bad issued date in the source data
+                // (e.g. a 2-digit year like "36" → 2036). Flag it instead of blocking
+                // a clean associate for years.
+                if ((retMid - todayMid) / 86400000 > 30) {
+                    return {
+                        kind: 'suspended', blocked: false, permanent: false, dataError: true,
+                        until: entry.returnDate,
+                        label: `SUSPENDED? check issued date (${formatShortDate(entry.issuedDate)} → returns ${formatShortDate(ret)})`,
+                        shortLabel: 'DATE?', className: 'flag-suspended'
+                    };
+                }
             }
             return {
                 kind: 'suspended', blocked: true, permanent: false, until: entry.returnDate,
