@@ -46,6 +46,7 @@ Your database URL (used throughout):
 3. **Read tab 1 (submission log).** Add **Excel Online (Business) → List rows present in a table**.
    - Location / Document Library / File = your workbook.
    - Table = the submission-log table.
+   - **⚠ Turn on pagination (critical).** "List rows present in a table" returns only **256 rows by default**. The tracking sheet is an append-only log well past 256 rows, so without this you only get the *oldest* rows and the recent/active suspensions & DNRs never reach Firebase (this is why Badge Check showed very little). Open the action's **⚙ Settings → Pagination → On**, and set the **Threshold** high (e.g. `100000`). Do this on **both** "List rows" actions, especially the corrective-actions one.
 
 4. **Project tab 1 to clean fields.** Add a **Select** action (Data Operation → Select) on the output of step 3. This renames columns to Firebase-safe keys and drops the rest. Map (From = `value`):
 
