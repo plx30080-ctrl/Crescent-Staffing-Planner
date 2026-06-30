@@ -6051,6 +6051,8 @@
             const [scanValue, setScanValue] = useState('');
             const [scanResult, setScanResult] = useState(null);
             const scanRef = useRef(null);
+            const [viewMode, setViewMode] = useState('roster'); // 'roster' | 'flags'
+            const [flagFilter, setFlagFilter] = useState('all'); // 'all' | 'dnr' | 'notactive'
 
             // Suspension/DNR status for a roster associate, matched on numeric EID.
             const disciplineFor = (a) => {
@@ -6225,6 +6227,34 @@
             const flaggedCount  = rosterList.filter(a => disciplineFor(a)).length;
             const statusUpdated = statusMeta && statusMeta.updatedAt ? new Date(statusMeta.updatedAt) : null;
 
+            // The DNR/flag list comes from the suspension/DNR data (statusList), keyed
+            // by EID independent of the roster — so DNRs who aren't on the roster or are
+            // inactive still appear. Each is cross-referenced to the roster.
+            const rosterByEid = {};
+            rosterList.forEach(a => { const k = normalizeEid(a.employeeId); if (k) rosterByEid[k] = a; });
+            const flaggedList = Object.values(statusList || {})
+                .map(e => ({ entry: e, status: resolveEntryStatus(e) }))
+                .filter(x => x.status)
+                .map(x => {
+                    const m = rosterByEid[normalizeEid(x.entry.eid)];
+                    return { ...x, roster: m ? (m.isActive ? 'active' : 'inactive') : 'none' };
+                })
+                .sort((a, b) => (STATUS_RANK[b.status.kind] - STATUS_RANK[a.status.kind]) ||
+                    (a.entry.name || '').localeCompare(b.entry.name || ''));
+            const visibleFlags = flaggedList.filter(x => {
+                if (flagFilter === 'dnr' && !(x.status.kind === 'dnr' || x.status.kind === 'terminated')) return false;
+                if (flagFilter === 'notactive' && x.roster === 'active') return false;
+                if (search.trim() && !(x.entry.name || '').toLowerCase().includes(search.toLowerCase()) && !String(x.entry.eid).includes(search)) return false;
+                return true;
+            });
+            const dnrTotal = flaggedList.filter(x => x.status.kind === 'dnr' || x.status.kind === 'terminated').length;
+            const dnrOffRoster = flaggedList.filter(x => (x.status.kind === 'dnr' || x.status.kind === 'terminated') && x.roster !== 'active').length;
+            const rosterLabel = (r) => r === 'active'
+                ? <span className="roster-active-badge">Active</span>
+                : r === 'inactive'
+                    ? <span className="roster-inactive-badge">Inactive</span>
+                    : <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', background: '#fee2e2', color: '#991b1b', fontWeight: 700 }}>Not on roster</span>;
+
             return (
                 <div className="roster-container">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
@@ -6310,10 +6340,32 @@
                             <div className="stat-num">{rosterList.length}</div>
                             <div className="stat-label">TOTAL</div>
                         </div>
-                        <div className="roster-stat-box">
+                        <div className="roster-stat-box" style={{ cursor: 'pointer' }} onClick={() => setViewMode('flags')} title="View the full DNR / flag list">
                             <div className="stat-num" style={{ color: '#9a3412' }}>{flaggedCount}</div>
                             <div className="stat-label">SUSP / DNR</div>
                         </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {['roster', 'flags'].map(vm => (
+                            <button
+                                key={vm}
+                                onClick={() => setViewMode(vm)}
+                                style={{
+                                    fontSize: '12px', padding: '6px 14px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600,
+                                    border: viewMode === vm ? '1px solid #667eea' : '1px solid #d1d5db',
+                                    background: viewMode === vm ? '#667eea' : '#eef1f5',
+                                    color: viewMode === vm ? 'white' : '#374151'
+                                }}
+                            >
+                                {vm === 'roster' ? 'Roster' : `DNR & Flag List (${flaggedList.length})`}
+                            </button>
+                        ))}
+                        {dnrOffRoster > 0 && (
+                            <span style={{ fontSize: '12px', color: '#991b1b', fontWeight: 700 }}>
+                                ⚠ {dnrOffRoster} DNR/terminated not on the active roster
+                            </span>
+                        )}
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
@@ -6325,29 +6377,77 @@
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
-                        <select
-                            style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: 'white' }}
-                            value={filterStatus}
-                            onChange={(e) => setFilterStatus(e.target.value)}
-                        >
-                            <option value="all">All</option>
-                            <option value="active">Active only</option>
-                            <option value="inactive">Inactive only</option>
-                            <option value="flagged">Flagged (susp/DNR)</option>
-                        </select>
-                        <select
-                            style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: 'white' }}
-                            value={filterShift}
-                            onChange={(e) => setFilterShift(e.target.value)}
-                        >
-                            <option value="all">All shifts</option>
-                            <option value="1st">1st shift</option>
-                            <option value="2nd">2nd shift</option>
-                            <option value="3rd">3rd shift</option>
-                        </select>
+                        {viewMode === 'roster' ? (
+                            <>
+                                <select
+                                    style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: 'white' }}
+                                    value={filterStatus}
+                                    onChange={(e) => setFilterStatus(e.target.value)}
+                                >
+                                    <option value="all">All</option>
+                                    <option value="active">Active only</option>
+                                    <option value="inactive">Inactive only</option>
+                                    <option value="flagged">Flagged (susp/DNR)</option>
+                                </select>
+                                <select
+                                    style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: 'white' }}
+                                    value={filterShift}
+                                    onChange={(e) => setFilterShift(e.target.value)}
+                                >
+                                    <option value="all">All shifts</option>
+                                    <option value="1st">1st shift</option>
+                                    <option value="2nd">2nd shift</option>
+                                    <option value="3rd">3rd shift</option>
+                                </select>
+                            </>
+                        ) : (
+                            <select
+                                style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px', background: 'white' }}
+                                value={flagFilter}
+                                onChange={(e) => setFlagFilter(e.target.value)}
+                            >
+                                <option value="all">All flags</option>
+                                <option value="dnr">DNR / Terminated only</option>
+                                <option value="notactive">Not on active roster</option>
+                            </select>
+                        )}
                     </div>
 
-                    {rosterList.length === 0 ? (
+                    {viewMode === 'flags' ? (
+                        <div style={{ overflowX: 'auto', maxHeight: '520px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
+                            <table className="roster-table">
+                                <thead>
+                                    <tr>
+                                        <th>Flag</th>
+                                        <th>Name</th>
+                                        <th>Employee ID</th>
+                                        <th>On Roster</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {visibleFlags.map(({ entry, status, roster: r }) => (
+                                        <tr key={entry.eid}>
+                                            <td><span className={`flag-badge ${status.className}`} title={status.label}>{status.shortLabel}</span></td>
+                                            <td style={{ fontWeight: '500' }}>{entry.name || '(no name)'}</td>
+                                            <td style={{ fontFamily: 'monospace', color: '#6b7280', fontSize: '11px' }}>{entry.eid}</td>
+                                            <td>{rosterLabel(r)}</td>
+                                            <td style={{ color: '#6b7280', fontSize: '12px' }}>
+                                                {status.kind === 'suspended' && entry.returnDate
+                                                    ? `Returns ${formatShortDate(entry.returnDate)}`
+                                                    : (entry.offense || '')}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {visibleFlags.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '24px', color: '#9ca3af', fontSize: '12px' }}>
+                                    {flaggedList.length === 0 ? 'No suspensions or DNRs on file.' : 'No matches.'}
+                                </div>
+                            )}
+                        </div>
+                    ) : rosterList.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '48px 24px', color: '#9ca3af' }}>
                             <div style={{ fontSize: '36px', marginBottom: '8px' }}>📋</div>
                             <div style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280' }}>No roster loaded</div>
