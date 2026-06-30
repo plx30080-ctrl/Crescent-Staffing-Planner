@@ -16,7 +16,11 @@
       "Bash(ESLINT_USE_FLAT_CONFIG=false ./node_modules/.bin/eslint app.jsx)",
       "Bash(git add *)",
       "Bash(git commit --no-verify -m ' *)",
-      "Bash(sort -t: -k1 -n)"
+      "Bash(sort -t: -k1 -n)",
+      "Bash(curl -sI --max-time 8 https://unpkg.com/react@18.3.1/umd/react.production.min.js)",
+      "Read(//Applications/**)",
+      "Bash(git push *)",
+      "Bash(curl -s --max-time 30 'https://staffingtool-1ab4f-default-rtdb.firebaseio.com/statusRaw.json' -o statusRaw.json)"
     ]
   }
 }
