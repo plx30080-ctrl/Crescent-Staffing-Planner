@@ -6048,7 +6048,6 @@
             const fileRef = useRef(null);
             const statusFileRef = useRef(null);
             const [statusUploadStatus, setStatusUploadStatus] = useState('');
-            const [scanValue, setScanValue] = useState('');
             const [scanResult, setScanResult] = useState(null);
             const scanRef = useRef(null);
             const [viewMode, setViewMode] = useState('roster'); // 'roster' | 'flags'
@@ -6076,11 +6075,11 @@
                 }
             };
 
-            const handleScan = () => {
-                const eid = normalizeEid(scanValue);
-                setScanValue('');
-                scanRef.current?.focus();
-                if (!eid) { setScanResult(null); return; }
+            // One box does both: typing filters the table (search); scanning a badge
+            // or pressing Enter on an EID runs the lookup and shows the result banner.
+            const handleScan = (rawValue) => {
+                const eid = normalizeEid(rawValue);
+                if (!eid) return; // plain text -> the table is already filtered by it
                 const rosterMatch = Object.values(roster || {}).find(r => normalizeEid(r.employeeId) === eid);
                 const entry = (statusList || {})[eid];
                 const status = entry ? resolveEntryStatus(entry) : null;
@@ -6097,6 +6096,8 @@
                     detail: rosterMatch ? (rosterMatch.isActive ? 'Active roster' : 'Inactive') : (entry ? 'Not on roster' : ''),
                     lastLead: history ? `${history.leadLabel} (${history.date}, Line ${history.letter})` : null
                 });
+                setSearch('');
+                setTimeout(() => scanRef.current && scanRef.current.focus(), 0);
             };
 
             useEffect(() => {
@@ -6286,14 +6287,14 @@
                     </div>
 
                     <div className="scan-box" style={{ marginBottom: '16px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>🔎 Scan badge or type EID</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>🔎 Scan a badge, or search by name / EID</div>
                         <input
                             ref={scanRef}
                             className="scan-input"
-                            value={scanValue}
-                            onChange={(e) => setScanValue(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleScan(); }}
-                            placeholder="Scan badge…"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleScan(search); } }}
+                            placeholder="Scan a badge, or type a name / EID to search…"
                             autoComplete="off"
                         />
                         {scanResult && (
@@ -6368,15 +6369,14 @@
                         )}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                        <input
-                            type="text"
-                            className="waitlist-input"
-                            style={{ flex: 1, minWidth: '200px' }}
-                            placeholder="Search by name or Employee ID..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {search.trim() && (
+                            <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                                Filtering by "<strong>{search.trim()}</strong>"
+                                <button onClick={() => setSearch('')} style={{ marginLeft: '6px', border: 'none', background: 'none', color: '#667eea', cursor: 'pointer', fontWeight: 600 }}>clear</button>
+                            </span>
+                        )}
+                        <span style={{ flex: 1 }}></span>
                         {viewMode === 'roster' ? (
                             <>
                                 <select
