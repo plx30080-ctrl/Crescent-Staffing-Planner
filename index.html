@@ -15,6 +15,8 @@
     <!-- SheetJS for XLSX export -->
     <!-- xlsx-js-style: SheetJS-compatible read/write + cell styling (borders/fills/fonts) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <!-- JSZip: post-process the exported xlsx to add fit-to-one-page print settings -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <style>
         * {
@@ -2555,7 +2557,7 @@
                 setLineLeadNotes(prev => ({ ...prev, [lead]: notes }));
             };
 
-            const handleExport = () => {
+            const handleExport = async () => {
                 const lastFirst = storage.load('nameDisplayLastFirst', false);
                 const fmtName = (n) => lastFirst ? formatLastFirst(n) : n;
                 const wb = XLSX.utils.book_new();
@@ -2639,9 +2641,35 @@
                     S(R, 0, { font: { sz: 11 }, fill: { patternType: 'solid', fgColor: { rgb: 'EEF2FF' } }, alignment: { vertical: 'center' }, border: grid });
                 }
                 ws['!rows'] = [{ hpt: 22 }];
+                ws['!margins'] = { left: 0.25, right: 0.25, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 };
 
                 XLSX.utils.book_append_sheet(wb, ws, 'Staffing');
-                XLSX.writeFile(wb, `staffing-${currentDate}-${currentShift}.xlsx`);
+
+                const fileName = `staffing-${currentDate}-${currentShift}.xlsx`;
+                // SheetJS can't write fit-to-page print settings, so post-process the
+                // xlsx zip to inject landscape + fit-to-one-page. Fall back to a plain
+                // save if JSZip isn't available.
+                try {
+                    if (typeof JSZip === 'undefined') throw new Error('no-jszip');
+                    const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+                    const zip = await JSZip.loadAsync(out);
+                    let xml = await zip.file('xl/worksheets/sheet1.xml').async('string');
+                    // Landscape; fit all rows onto ONE page tall (so a line's names never
+                    // split across pages) but let columns flow across pages (a bunch of
+                    // lines can span two pages wide).
+                    xml = xml.replace(/(<worksheet[^>]*>)/, '$1<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
+                    xml = xml.replace(/(<pageMargins[^>]*\/>)/, '$1<pageSetup orientation="landscape" fitToWidth="0" fitToHeight="1"/>');
+                    zip.file('xl/worksheets/sheet1.xml', xml);
+                    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = fileName;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 1500);
+                } catch (err) {
+                    console.error('Fit-to-page post-process failed, saving plain:', err);
+                    XLSX.writeFile(wb, fileName);
+                }
             };
 
             const handleClearAll = () => {
