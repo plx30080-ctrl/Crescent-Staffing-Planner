@@ -13,7 +13,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
     <!-- SheetJS for XLSX export -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <!-- xlsx-js-style: SheetJS-compatible read/write + cell styling (borders/fills/fonts) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 
     <style>
         * {
@@ -2555,238 +2556,91 @@
             };
 
             const handleExport = () => {
-                // Match the staffing screen's name-display preference (Last, First).
                 const lastFirst = storage.load('nameDisplayLastFirst', false);
                 const fmtName = (n) => lastFirst ? formatLastFirst(n) : n;
-
-                // Create workbook
                 const wb = XLSX.utils.book_new();
 
-                // Calculate stats (excluding Crescent positions)
-                const activeLines = lines.filter(line => !line.isCut);
-                const cutLines = lines.filter(line => line.isCut);
-                const totalPositions = activeLines.reduce((sum, line) => sum + line.needed, 0);
-                const filledPositions = activeLines.reduce((sum, line) =>
-                    sum + line.positions.filter(p => p.name.trim() && !p.isCrescent).length, 0
-                );
-                const newAssociates = activeLines.reduce((sum, line) =>
-                    sum + line.positions.filter(p => p.name.trim() && p.isNew && !p.isCrescent).length, 0
-                );
+                const activeLines = lines.filter(l => !l.isCut);
+                const cutLines = lines.filter(l => l.isCut);
+                const totalPositions = activeLines.reduce((s, l) => s + l.needed, 0);
+                const filledPositions = activeLines.reduce((s, l) => s + l.positions.filter(p => p.name.trim() && !p.isCrescent).length, 0);
+                const newAssociates = activeLines.reduce((s, l) => s + l.positions.filter(p => p.name.trim() && p.isNew && !p.isCrescent).length, 0);
+                const waitingCount = waitlist.filter(w => w.name.trim()).length;
+                const indirectNames = (indirect || []).filter(i => i.name.trim());
 
-                // Build data in column-based layout (like the tool)
+                // Column-based grid: [line | spacer] per line, then waitlist. Spacer
+                // columns are gutters (kept so exported files still re-import cleanly).
+                const nCols = lines.length * 2 + 1;
+                const lastCol = lines.length * 2;
+                const pad = (row) => { while (row.length < nCols) row.push(''); return row; };
                 const data = [];
-
-                // Title row
-                data.push(['Crescent Staffing Planner']);
-
-                // Info row
-                data.push([`${currentDate} - ${currentShift} Shift`, '', '', '', `Exported: ${new Date().toLocaleString()}`]);
-
-                // Stats row
-                data.push([`${filledPositions} / ${totalPositions} filled`, `${newAssociates} new`, cutLines.length > 0 ? `${cutLines.length} cut` : '', waitlist.filter(w => w.name.trim()).length > 0 ? `${waitlist.filter(w => w.name.trim()).length} waiting` : '']);
-
-                // Empty row
-                data.push([]);
-
-                // Find max positions needed for any line (excluding Crescent positions)
-                const maxPositions = Math.max(
-                    ...lines.map(l => l.positions.filter(p => !p.isCrescent).length),
-                    waitlist.length
-                );
-
-                // Header row - Line letters and waitlist
-                const headerRow = [];
-                lines.forEach(line => {
-                    headerRow.push(`Line ${line.letter}${line.isCut ? ' (CUT)' : ''}`);
-                    headerRow.push(''); // Spacing column
-                });
-                headerRow.push('WAITLIST');
-                data.push(headerRow);
-
-                // Subheader row - Line leads
-                const subheaderRow = [];
-                lines.forEach(line => {
-                    const leads = (line.leads || []).join(', ');
-                    subheaderRow.push(leads || 'No lead');
-                    subheaderRow.push(''); // Spacing column
-                });
-                subheaderRow.push('');
-                data.push(subheaderRow);
-
-                // Position rows (Crescent positions are excluded from export)
-                for (let i = 0; i < maxPositions; i++) {
+                data.push(pad(['Crescent Staffing Planner']));
+                data.push(pad([`${currentDate} · ${currentShift} Shift`, '', '', '', `Exported ${new Date().toLocaleString()}`]));
+                data.push(pad([`Filled ${filledPositions}/${totalPositions}`, `New ${newAssociates}`, cutLines.length ? `Cut ${cutLines.length}` : '', waitingCount ? `Waiting ${waitingCount}` : '', indirectNames.length ? `Indirect ${indirectNames.length}` : '']));
+                data.push(pad([]));
+                const hdr = []; lines.forEach(l => { hdr.push(`Line ${l.letter}${l.isCut ? ' (CUT)' : ''}`); hdr.push(''); }); hdr.push('WAITLIST'); data.push(pad(hdr));
+                const lead = []; lines.forEach(l => { lead.push((l.leads || []).join(', ') || 'No lead'); lead.push(''); }); lead.push('On-call'); data.push(pad(lead));
+                const maxPos = Math.max(0, ...lines.map(l => l.positions.filter(p => !p.isCrescent).length), waitlist.length);
+                for (let i = 0; i < maxPos; i++) {
                     const row = [];
-                    lines.forEach(line => {
-                        const nonCrescentPositions = line.positions.filter(p => !p.isCrescent);
-                        const position = nonCrescentPositions[i];
-                        if (position) {
-                            const name = fmtName(position.name || '');
-                            const marker = position.isNew ? ' ⭐' : '';
-                            row.push(name + marker);
-                        } else {
-                            row.push('');
-                        }
-                        row.push(''); // Spacing column
-                    });
-
-                    // Add waitlist item
-                    const waitlistItem = waitlist[i];
-                    if (waitlistItem) {
-                        const marker = waitlistItem.isNew ? ' ⭐' : '';
-                        row.push(fmtName(waitlistItem.name || '') + marker);
-                    } else {
+                    lines.forEach(l => {
+                        const nc = l.positions.filter(p => !p.isCrescent);
+                        const p = nc[i];
+                        row.push(p && p.name.trim() ? fmtName(p.name) + (p.isNew ? ' ⭐' : '') : '');
                         row.push('');
-                    }
-
-                    data.push(row);
-                }
-
-                // Create worksheet
-                const ws = XLSX.utils.aoa_to_sheet(data);
-
-                // Set column widths
-                const colWidths = [];
-                lines.forEach(() => {
-                    colWidths.push({ wch: 20 }); // Line column
-                    colWidths.push({ wch: 2 });  // Spacing column
-                });
-                colWidths.push({ wch: 20 }); // Waitlist column
-                ws['!cols'] = colWidths;
-
-                // Apply styling
-                const range = XLSX.utils.decode_range(ws['!ref']);
-
-                // Style title (row 0)
-                for (let C = range.s.c; C <= range.e.c; C++) {
-                    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-                    if (!ws[cellAddress]) continue;
-                    ws[cellAddress].s = {
-                        font: { bold: true, sz: 16, color: { rgb: "FFFFFF" } },
-                        fill: { fgColor: { rgb: "667EEA" } },
-                        alignment: { horizontal: "center", vertical: "center" }
-                    };
-                }
-
-                // Style info row (row 1)
-                for (let C = range.s.c; C <= range.e.c; C++) {
-                    const cellAddress = XLSX.utils.encode_cell({ r: 1, c: C });
-                    if (!ws[cellAddress]) continue;
-                    ws[cellAddress].s = {
-                        font: { bold: true, sz: 11 },
-                        fill: { fgColor: { rgb: "F3F4F6" } },
-                        alignment: { horizontal: "center" }
-                    };
-                }
-
-                // Style stats row (row 2)
-                for (let C = range.s.c; C <= range.e.c; C++) {
-                    const cellAddress = XLSX.utils.encode_cell({ r: 2, c: C });
-                    if (!ws[cellAddress]) continue;
-                    ws[cellAddress].s = {
-                        font: { sz: 10 },
-                        fill: { fgColor: { rgb: "E5E7EB" } },
-                        alignment: { horizontal: "center" }
-                    };
-                }
-
-                // Style line headers (row 4)
-                let colIndex = 0;
-                lines.forEach((line, idx) => {
-                    const cellAddress = XLSX.utils.encode_cell({ r: 4, c: colIndex });
-                    if (ws[cellAddress]) {
-                        ws[cellAddress].s = {
-                            font: { bold: true, sz: 12, color: { rgb: "FFFFFF" } },
-                            fill: { fgColor: { rgb: line.isCut ? "EF4444" : "667EEA" } },
-                            alignment: { horizontal: "center", vertical: "center" }
-                        };
-                    }
-                    colIndex += 2; // Skip spacing column
-                });
-
-                // Style waitlist header
-                const waitlistHeaderCell = XLSX.utils.encode_cell({ r: 4, c: colIndex });
-                if (ws[waitlistHeaderCell]) {
-                    ws[waitlistHeaderCell].s = {
-                        font: { bold: true, sz: 12, color: { rgb: "FFFFFF" } },
-                        fill: { fgColor: { rgb: "F59E0B" } },
-                        alignment: { horizontal: "center", vertical: "center" }
-                    };
-                }
-
-                // Style lead names (row 5)
-                colIndex = 0;
-                lines.forEach(() => {
-                    const cellAddress = XLSX.utils.encode_cell({ r: 5, c: colIndex });
-                    if (ws[cellAddress]) {
-                        ws[cellAddress].s = {
-                            font: { italic: true, sz: 10 },
-                            fill: { fgColor: { rgb: "F9FAFB" } },
-                            alignment: { horizontal: "center" }
-                        };
-                    }
-                    colIndex += 2;
-                });
-
-                // Style position cells (starting from row 6)
-                for (let R = 6; R <= range.e.r; R++) {
-                    colIndex = 0;
-                    lines.forEach((line) => {
-                        const cellAddress = XLSX.utils.encode_cell({ r: R, c: colIndex });
-                        if (ws[cellAddress]) {
-                            const cellValue = ws[cellAddress].v || '';
-                            const isNew = cellValue.includes('⭐');
-                            const isEmpty = !cellValue.trim() || cellValue.trim() === '⭐';
-
-                            ws[cellAddress].s = {
-                                fill: {
-                                    fgColor: {
-                                        rgb: isEmpty ? "FFFFFF" :
-                                             isNew ? "DBEAFE" :
-                                             line.isCut ? "FEE2E2" :
-                                             "F0FDF4"
-                                    }
-                                },
-                                border: {
-                                    top: { style: "thin", color: { rgb: "E5E7EB" } },
-                                    bottom: { style: "thin", color: { rgb: "E5E7EB" } },
-                                    left: { style: "thin", color: { rgb: "E5E7EB" } },
-                                    right: { style: "thin", color: { rgb: "E5E7EB" } }
-                                },
-                                alignment: { vertical: "center" }
-                            };
-                        }
-                        colIndex += 2;
                     });
-
-                    // Style waitlist cells
-                    const waitlistCell = XLSX.utils.encode_cell({ r: R, c: colIndex });
-                    if (ws[waitlistCell]) {
-                        const cellValue = ws[waitlistCell].v || '';
-                        const isNew = cellValue.includes('⭐');
-                        const isEmpty = !cellValue.trim() || cellValue.trim() === '⭐';
-
-                        ws[waitlistCell].s = {
-                            fill: {
-                                fgColor: {
-                                    rgb: isEmpty ? "FFFFFF" :
-                                         isNew ? "DBEAFE" :
-                                         "FEF3C7"
-                                }
-                            },
-                            border: {
-                                top: { style: "thin", color: { rgb: "E5E7EB" } },
-                                bottom: { style: "thin", color: { rgb: "E5E7EB" } },
-                                left: { style: "thin", color: { rgb: "E5E7EB" } },
-                                right: { style: "thin", color: { rgb: "E5E7EB" } }
-                            },
-                            alignment: { vertical: "center" }
-                        };
-                    }
+                    const w = waitlist[i];
+                    row.push(w && w.name.trim() ? fmtName(w.name) + (w.isNew ? ' ⭐' : '') : '');
+                    data.push(pad(row));
                 }
+                data.push(pad([]));
+                const indHdrRow = data.length;
+                data.push(pad(['INDIRECT — Off-Floor (not counted in fill)']));
+                (indirectNames.length ? indirectNames.map(i => i.name) : ['(none)']).forEach(nm => data.push(pad([fmtName(nm)])));
+
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                const cols = []; lines.forEach(() => { cols.push({ wch: 22 }); cols.push({ wch: 2 }); }); cols.push({ wch: 22 }); ws['!cols'] = cols;
+
+                // ---- styling (borders + shading; readable in B&W via the grid + bold headers) ----
+                const B = (c) => ({ style: 'thin', color: { rgb: c || '000000' } });
+                const grid = { top: B(), bottom: B(), left: B(), right: B() };
+                const S = (r, c, s) => { const a = XLSX.utils.encode_cell({ r, c }); if (ws[a]) ws[a].s = s; };
+                const range = XLSX.utils.decode_range(ws['!ref']);
+                ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } }, { s: { r: indHdrRow, c: 0 }, e: { r: indHdrRow, c: lastCol } }];
+
+                S(0, 0, { font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '374151' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: grid });
+                for (let c = 0; c <= lastCol; c++) {
+                    S(1, c, { font: { bold: true, sz: 10 }, fill: { patternType: 'solid', fgColor: { rgb: 'E5E7EB' } }, alignment: { horizontal: 'center' }, border: grid });
+                    S(2, c, { font: { sz: 10 }, fill: { patternType: 'solid', fgColor: { rgb: 'F3F4F6' } }, alignment: { horizontal: 'center' }, border: grid });
+                }
+                let ci = 0;
+                lines.forEach(l => {
+                    S(4, ci, { font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: l.isCut ? '991B1B' : '374151' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: grid });
+                    S(5, ci, { font: { italic: true, sz: 10 }, fill: { patternType: 'solid', fgColor: { rgb: 'F9FAFB' } }, alignment: { horizontal: 'center' }, border: grid });
+                    ci += 2;
+                });
+                S(4, lastCol, { font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '92400E' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: grid });
+                S(5, lastCol, { font: { italic: true, sz: 10 }, fill: { patternType: 'solid', fgColor: { rgb: 'FEF9C3' } }, alignment: { horizontal: 'center' }, border: grid });
+                for (let R = 6; R < 6 + maxPos; R++) {
+                    ci = 0;
+                    lines.forEach(l => {
+                        const a = XLSX.utils.encode_cell({ r: R, c: ci });
+                        const v = ((ws[a] && ws[a].v) || '').toString();
+                        const empty = !v.trim(); const nw = v.includes('⭐');
+                        S(R, ci, { font: { sz: 11 }, fill: { patternType: 'solid', fgColor: { rgb: empty ? 'FFFFFF' : nw ? 'DBEAFE' : l.isCut ? 'FEE2E2' : 'ECFDF5' } }, alignment: { vertical: 'center' }, border: grid });
+                        ci += 2;
+                    });
+                    const a = XLSX.utils.encode_cell({ r: R, c: lastCol });
+                    const v = ((ws[a] && ws[a].v) || '').toString();
+                    S(R, lastCol, { font: { sz: 11 }, fill: { patternType: 'solid', fgColor: { rgb: !v.trim() ? 'FFFFFF' : v.includes('⭐') ? 'DBEAFE' : 'FEF9C3' } }, alignment: { vertical: 'center' }, border: grid });
+                }
+                S(indHdrRow, 0, { font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '3730A3' } }, alignment: { horizontal: 'left', vertical: 'center' }, border: grid });
+                for (let R = indHdrRow + 1; R <= range.e.r; R++) {
+                    S(R, 0, { font: { sz: 11 }, fill: { patternType: 'solid', fgColor: { rgb: 'EEF2FF' } }, alignment: { vertical: 'center' }, border: grid });
+                }
+                ws['!rows'] = [{ hpt: 22 }];
 
                 XLSX.utils.book_append_sheet(wb, ws, 'Staffing');
-
-                // Export file
                 XLSX.writeFile(wb, `staffing-${currentDate}-${currentShift}.xlsx`);
             };
 
