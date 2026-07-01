@@ -1339,6 +1339,9 @@
             if (parts.length < 2) return n;
             return `${parts[parts.length - 1]}, ${parts.slice(0, -1).join(' ')}`;
         };
+        // Default empty "Indirect" slots (off-floor: sanitation/office/forklift).
+        const makeIndirectSlots = (n) => Array.from({ length: n }, (_, i) => ({ id: Date.now() + Math.random() + i, name: '' }));
+
         // Surname sort key (case-insensitive) for alphabetizing by last name.
         const lastNameKey = (name) => {
             const n = (name || '').toString().trim();
@@ -1681,6 +1684,7 @@
             const [currentShift, setCurrentShift] = useState('1st');
             const [lines, setLines] = useState([]);
             const [waitlist, setWaitlist] = useState([]);
+            const [indirect, setIndirect] = useState([]); // off-floor (sanitation/office/forklift); not counted
             const [coreAssociates, setCoreAssociates] = useState({});
             const [lineLeadNotes, setLineLeadNotes] = useState({});
             const [saveStatus, setSaveStatus] = useState('');
@@ -1886,10 +1890,11 @@
                 const capturedShift = currentShift;
                 const capturedLines = lines;
                 const capturedWaitlist = waitlist;
+                const capturedIndirect = indirect;
                 const capturedLocked = isLocked;
 
                 saveTimeoutRef.current = setTimeout(() => {
-                    handleAutoSave(capturedDate, capturedShift, capturedLines, capturedWaitlist, capturedLocked);
+                    handleAutoSave(capturedDate, capturedShift, capturedLines, capturedWaitlist, capturedLocked, capturedIndirect);
                 }, 2000);
 
                 return () => {
@@ -1897,9 +1902,9 @@
                         clearTimeout(saveTimeoutRef.current);
                     }
                 };
-            }, [lines, waitlist, currentDate, currentShift]);
+            }, [lines, waitlist, indirect, currentDate, currentShift]);
 
-            const handleAutoSave = async (date, shift, saveLines, saveWaitlist, locked) => {
+            const handleAutoSave = async (date, shift, saveLines, saveWaitlist, locked, saveIndirect) => {
                 if (savingRef.current) return;
                 savingRef.current = true;
 
@@ -1908,6 +1913,7 @@
                     shift: shift,
                     lines: saveLines,
                     waitlist: saveWaitlist,
+                    indirect: saveIndirect || [],
                     locked: locked,
                     lastUpdated: new Date().toISOString()
                 };
@@ -1983,6 +1989,7 @@
                                 isLoadingRef.current = false;
                                 setLines(data.lines || []);
                                 setWaitlist(data.waitlist || []);
+                                setIndirect(data.indirect && data.indirect.length ? data.indirect : makeIndirectSlots(3));
                                 setIsLocked(data.locked || false);
                                 return;
                             } else {
@@ -2001,11 +2008,13 @@
                         console.log('Loaded from localStorage:', localData);
                         setLines(localData.lines || []);
                         setWaitlist(localData.waitlist || []);
+                        setIndirect(localData.indirect && localData.indirect.length ? localData.indirect : makeIndirectSlots(3));
                         setIsLocked(localData.locked || false);
                     } else {
                         console.log('No data found');
                         setLines([]);
                         setWaitlist([]);
+                        setIndirect(makeIndirectSlots(3));
                         setIsLocked(false);
                     }
                 } catch (error) {
@@ -2121,9 +2130,13 @@
                         allCoreAssociates.push(...coreList);
                     });
 
+                    // Drop associates who don't work this day of the week (part-time schedule).
+                    const shiftDow = new Date((shiftData.date || '') + 'T00:00:00').getDay();
+                    const availableCore = allCoreAssociates.filter(a => !(a.offDays || []).includes(shiftDow));
+
                     // Separate Crescent-tagged associates from regular ones
-                    const regularAssociates = allCoreAssociates.filter(a => !(a.flags || []).includes('crescent'));
-                    const crescentAssociates = allCoreAssociates.filter(a => (a.flags || []).includes('crescent'));
+                    const regularAssociates = availableCore.filter(a => !(a.flags || []).includes('crescent'));
+                    const crescentAssociates = availableCore.filter(a => (a.flags || []).includes('crescent'));
                     // Deduct crescent count from the requested number — crescent fill some of the needed slots
                     const needed = Math.max(0, parseInt(line.needed) - crescentAssociates.length);
 
@@ -2164,6 +2177,7 @@
 
                 setLines(newLines);
                 setWaitlist([]);
+                setIndirect(makeIndirectSlots(3));
                 setActiveTab('staffing');
             };
 
@@ -2781,6 +2795,7 @@
                     pushUndo('Shift data cleared');
                     setLines([]);
                     setWaitlist([]);
+                    setIndirect(makeIndirectSlots(3));
                 }
             };
 
@@ -2961,6 +2976,8 @@
                                 onDrop={handleDrop}
                                 setLines={setLines}
                                 setWaitlist={setWaitlist}
+                                indirect={indirect}
+                                setIndirect={setIndirect}
                                 statusNameIndex={statusNameIndex}
                                 workHistoryIndex={workHistoryIndex}
                                 statusList={statusList}
@@ -3006,6 +3023,7 @@
                                 statusMeta={statusMeta}
                                 onStatusUpload={handleStatusUpload}
                                 workHistoryIndex={workHistoryIndex}
+                                coreAssociates={coreAssociates}
                             />
                         )}
                     </div>
@@ -3267,6 +3285,8 @@
             onDrop,
             setLines,
             setWaitlist,
+            indirect,
+            setIndirect,
             statusNameIndex,
             workHistoryIndex,
             statusList,
@@ -3276,6 +3296,12 @@
             const [quickAddInput, setQuickAddInput] = useState('');
             const [quickAddNames, setQuickAddNames] = useState([]); // [{name, lastLine, lastShift}]
             const [waitlistSearch, setWaitlistSearch] = useState('');
+            const [showWaitlist, setShowWaitlist] = useState(() => storage.load('showWaitlistDrawer', true));
+            const toggleWaitlist = () => setShowWaitlist(v => { const nv = !v; storage.save('showWaitlistDrawer', nv); return nv; });
+            // Indirect (off-floor) slots — not counted toward fill/positions.
+            const addIndirect = () => setIndirect(prev => [...(prev || []), { id: Date.now() + Math.random(), name: '' }]);
+            const updateIndirect = (id, name) => setIndirect(prev => (prev || []).map(i => i.id === id ? { ...i, name } : i));
+            const removeIndirect = (id) => setIndirect(prev => (prev || []).filter(i => i.id !== id));
             const [selectMode, setSelectMode] = useState(false);
             const [selectedPositions, setSelectedPositions] = useState([]);
             const [selectedWaitlist, setSelectedWaitlist] = useState([]);
@@ -3571,12 +3597,14 @@
                             </div>
                         </div>
 
+                        {showWaitlist ? (
                         <div
                             className={`waitlist-sidebar ${isLocked ? 'locked-overlay' : ''}`}
                             onDragOver={isLocked || selectMode ? null : onDragOver}
                             onDrop={(e) => isLocked || selectMode ? e.preventDefault() : onDrop(e, { type: 'waitlist' })}
                         >
                             <div className="waitlist-header" style={isLocked ? {pointerEvents: 'auto'} : {}}>
+                                <button onClick={toggleWaitlist} title="Hide waitlist" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '14px', marginRight: '4px', fontWeight: 700 }}>⟩</button>
                                 WAITLIST ({waitlist.filter(w => w.name.trim()).length})
                                 <div style={{ display: 'flex', gap: '4px', marginLeft: '8px' }}>
                                     <button
@@ -3682,7 +3710,43 @@
                                     </div>
                                 )}
                             </div>
+                            <div style={{ borderTop: '2px solid #c7d2fe', marginTop: 'auto' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', background: '#eef2ff' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#3730a3' }}>
+                                        INDIRECT ({(indirect || []).filter(i => i.name.trim()).length})
+                                    </span>
+                                    <button className="btn btn-primary btn-small" onClick={addIndirect} disabled={isLocked} style={{ fontSize: '11px', opacity: isLocked ? 0.5 : 1 }}>+ Add</button>
+                                </div>
+                                <div style={{ padding: '2px 8px 4px', fontSize: '10px', color: '#9ca3af' }}>Off-floor (sanitation, office, forklift) — not counted in fill.</div>
+                                <div className="waitlist-items" style={{ maxHeight: '170px' }}>
+                                    {(indirect || []).map((item, idx) => (
+                                        <div key={item.id} className="waitlist-item" style={{ opacity: isLocked ? 0.7 : 1 }}>
+                                            <div style={{ fontSize: '10px', color: '#6b7280', fontWeight: '600' }}>I{idx + 1}</div>
+                                            <AutocompleteInput
+                                                className="waitlist-input"
+                                                value={item.name}
+                                                onChange={(val) => updateIndirect(item.id, val)}
+                                                roster={roster}
+                                                lastFirst={lastFirst}
+                                                placeholder="Name (off-floor)..."
+                                                disabled={isLocked}
+                                            />
+                                            <button className="btn btn-danger btn-small" onClick={() => removeIndirect(item.id)} disabled={isLocked} style={{ opacity: isLocked ? 0.5 : 1 }}>×</button>
+                                        </div>
+                                    ))}
+                                    {(indirect || []).length === 0 && (
+                                        <div style={{ textAlign: 'center', padding: '12px', color: '#9ca3af', fontSize: '11px' }}>No indirect slots — click + Add</div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
+                        ) : (
+                            <div onClick={toggleWaitlist} title="Show waitlist & indirect" style={{ flexShrink: 0, width: '42px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <span style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: '12px', fontWeight: 700, color: '#92400e', whiteSpace: 'nowrap' }}>
+                                    ▸ Waitlist ({waitlist.filter(w => w.name.trim()).length}) · Indirect ({(indirect || []).filter(i => i.name.trim()).length})
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Bulk Action Bar */}
@@ -4778,9 +4842,11 @@
             };
 
             const renderReportItem = (report) => {
+                // Crescent staff fill extra slots beyond `needed`, so they must NOT count
+                // toward filled/total (otherwise a short shift can read e.g. 118/90).
                 const totalPositions = (report.lines || []).reduce((sum, line) => sum + line.needed, 0);
                 const filledPositions = (report.lines || []).reduce((sum, line) =>
-                    sum + line.positions.filter(p => p.name && p.name.trim()).length, 0
+                    sum + line.positions.filter(p => p.name && p.name.trim() && !p.isCrescent).length, 0
                 );
 
                 return (
@@ -5080,6 +5146,30 @@
             { id: 'crescent', label: 'Crescent', className: 'flag-crescent' }
         ];
 
+        // Pick the weekdays an associate does NOT work (so they won't auto-fill on those
+        // days). Empty = works every day. Value is an array of weekday indices (0=Sun).
+        function DaysOffPicker({ value, onChange }) {
+            const labels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+            const off = value || [];
+            const toggle = (d) => onChange(off.includes(d) ? off.filter(x => x !== d) : [...off, d].sort((a, b) => a - b));
+            return (
+                <div style={{ display: 'flex', gap: '2px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '10px', color: '#6b7280', marginRight: '2px' }} title="Days this associate does NOT work — they won't auto-fill onto lines on those days">Days off:</span>
+                    {labels.map((l, d) => (
+                        <button key={d} type="button" onClick={() => toggle(d)}
+                            style={{
+                                fontSize: '10px', padding: '2px 6px', borderRadius: '3px', cursor: 'pointer',
+                                border: off.includes(d) ? '1px solid #dc2626' : '1px solid #d1d5db',
+                                background: off.includes(d) ? '#fee2e2' : '#f9fafb',
+                                color: off.includes(d) ? '#991b1b' : '#6b7280', fontWeight: off.includes(d) ? 700 : 400
+                            }}>
+                            {l}
+                        </button>
+                    ))}
+                </div>
+            );
+        }
+
         function FlagsDropdown({ flags = [], onChange, inForm = false }) {
             const [isOpen, setIsOpen] = useState(false);
             const dropdownRef = useRef(null);
@@ -5174,6 +5264,7 @@
             const [newLead, setNewLead] = useState('');
             const [newName, setNewName] = useState('');
             const [newFlags, setNewFlags] = useState([]);
+            const [newOffDays, setNewOffDays] = useState([]);
             const [filterFlags, setFilterFlags] = useState([]);
             const [sortBy, setSortBy] = useState('name'); // 'name' or flag id
             const [searchQuery, setSearchQuery] = useState('');
@@ -5184,6 +5275,7 @@
             const [editingKey, setEditingKey] = useState(null); // { lead, index }
             const [editAssocName, setEditAssocName] = useState('');
             const [editAssocFlags, setEditAssocFlags] = useState([]);
+            const [editAssocOffDays, setEditAssocOffDays] = useState([]);
 
             const allLeads = Object.keys(coreAssociates);
 
@@ -5238,10 +5330,12 @@
                 if (currentLead && newName) {
                     onAddCoreAssociate(currentLead, {
                         name: newName,
-                        flags: newFlags
+                        flags: newFlags,
+                        offDays: newOffDays
                     });
                     setNewName('');
                     setNewFlags([]);
+                    setNewOffDays([]);
                     if (newLead) {
                         setSelectedLead(newLead);
                         setNewLead('');
@@ -5280,23 +5374,27 @@
                 setEditingKey({ lead, index });
                 setEditAssocName(associate.name);
                 setEditAssocFlags(associate.flags || []);
+                setEditAssocOffDays(associate.offDays || []);
             };
 
             const handleSaveEditAssociate = () => {
                 if (!editingKey || !editAssocName.trim()) return;
                 onUpdateCoreAssociate(editingKey.lead, editingKey.index, {
                     name: editAssocName.trim(),
-                    flags: editAssocFlags
+                    flags: editAssocFlags,
+                    offDays: editAssocOffDays
                 });
                 setEditingKey(null);
                 setEditAssocName('');
                 setEditAssocFlags([]);
+                setEditAssocOffDays([]);
             };
 
             const handleCancelEditAssociate = () => {
                 setEditingKey(null);
                 setEditAssocName('');
                 setEditAssocFlags([]);
+                setEditAssocOffDays([]);
             };
 
             const filteredAssociates = getFilteredAssociates();
@@ -5444,6 +5542,10 @@
                                                     <label>Flags / Skills</label>
                                                     <FlagsDropdown flags={newFlags} onChange={setNewFlags} inForm={true} />
                                                 </div>
+                                                <div className="form-group">
+                                                    <label>Part-time schedule</label>
+                                                    <DaysOffPicker value={newOffDays} onChange={setNewOffDays} />
+                                                </div>
                                             </div>
                                             <button type="submit" className="btn btn-success">
                                                 + Add Core Associate
@@ -5527,6 +5629,9 @@
                                                                 />
                                                                 <FlagsDropdown flags={editAssocFlags} onChange={setEditAssocFlags} inForm={true} />
                                                             </div>
+                                                            <div style={{ marginBottom: '6px' }}>
+                                                                <DaysOffPicker value={editAssocOffDays} onChange={setEditAssocOffDays} />
+                                                            </div>
                                                             <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                                                                 <button className="btn btn-success btn-small" onClick={handleSaveEditAssociate}>Save</button>
                                                                 <button className="btn btn-secondary btn-small" onClick={handleCancelEditAssociate}>Cancel</button>
@@ -5548,6 +5653,11 @@
                                                                         <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>No flags</span>
                                                                     )}
                                                                 </div>
+                                                                {associate.offDays && associate.offDays.length > 0 && (
+                                                                    <div style={{ fontSize: '10px', color: '#991b1b', marginTop: '2px', fontWeight: 600 }}>
+                                                                        Off: {associate.offDays.slice().sort((a, b) => a - b).map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                             <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
                                                                 <button
@@ -5624,6 +5734,9 @@
                                                                             />
                                                                             <FlagsDropdown flags={editAssocFlags} onChange={setEditAssocFlags} inForm={true} />
                                                                         </div>
+                                                                        <div style={{ marginBottom: '6px' }}>
+                                                                            <DaysOffPicker value={editAssocOffDays} onChange={setEditAssocOffDays} />
+                                                                        </div>
                                                                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                                                                             <button className="btn btn-success btn-small" onClick={handleSaveEditAssociate}>Save</button>
                                                                             <button className="btn btn-secondary btn-small" onClick={handleCancelEditAssociate}>Cancel</button>
@@ -5645,6 +5758,11 @@
                                                                                     <span style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>No flags</span>
                                                                                 )}
                                                                             </div>
+                                                                            {associate.offDays && associate.offDays.length > 0 && (
+                                                                                <div style={{ fontSize: '10px', color: '#991b1b', marginTop: '2px', fontWeight: 600 }}>
+                                                                                    Off: {associate.offDays.slice().sort((a, b) => a - b).map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                         <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
                                                                             <button
@@ -5863,8 +5981,8 @@
 
             const fillRates = reports.map(r => {
                 const lines = (r.lines || []).filter(l => !l.isCut);
-                const total = lines.reduce((s, l) => s + (l.needed || l.positions.length), 0);
-                const filled = lines.reduce((s, l) => s + l.positions.filter(p => p.name && p.name.trim()).length, 0);
+                const total = lines.reduce((s, l) => s + (l.needed || l.positions.filter(p => !p.isCrescent).length), 0);
+                const filled = lines.reduce((s, l) => s + l.positions.filter(p => p.name && p.name.trim() && !p.isCrescent).length, 0);
                 return total > 0 ? (filled / total) * 100 : 0;
             });
             const avgFillRate = fillRates.length > 0 ? (fillRates.reduce((a, b) => a + b, 0) / fillRates.length) : 0;
@@ -6038,7 +6156,7 @@
             );
         }
 
-        function RosterView({ roster, onSyncRoster, onUpdateAssociate, statusList, statusMeta, onStatusUpload, workHistoryIndex }) {
+        function RosterView({ roster, onSyncRoster, onUpdateAssociate, statusList, statusMeta, onStatusUpload, workHistoryIndex, coreAssociates }) {
             const [search, setSearch] = useState('');
             const [filterStatus, setFilterStatus] = useState('active');
             const [filterShift, setFilterShift] = useState('all');
@@ -6059,6 +6177,22 @@
                 const entry = eid ? (statusList || {})[eid] : null;
                 return entry ? resolveEntryStatus(entry) : null;
             };
+
+            // Core-team lead(s) + skill flags for an associate, matched by name.
+            const coreIndex = React.useMemo(() => {
+                const idx = {};
+                Object.entries(coreAssociates || {}).forEach(([lead, members]) => {
+                    (members || []).forEach(m => {
+                        if (!m || !m.name) return;
+                        const k = normalizeName(m.name);
+                        if (!idx[k]) idx[k] = { leads: [], flags: [] };
+                        if (lead && !idx[k].leads.includes(lead)) idx[k].leads.push(lead);
+                        (m.flags || []).forEach(f => { if (!idx[k].flags.includes(f)) idx[k].flags.push(f); });
+                    });
+                });
+                return idx;
+            }, [coreAssociates]);
+            const coreInfoFor = (name) => coreIndex[normalizeName(name || '')] || null;
 
             const handleStatusFile = async (e) => {
                 const file = e.target.files?.[0];
@@ -6094,7 +6228,8 @@
                     eid, cls, headline,
                     name: lookupName || '(not on file)',
                     detail: rosterMatch ? (rosterMatch.isActive ? 'Active roster' : 'Inactive') : (entry ? 'Not on roster' : ''),
-                    lastLead: history ? `${history.leadLabel} (${history.date}, Line ${history.letter})` : null
+                    lastLead: history ? `${history.leadLabel} (${history.date}, Line ${history.letter})` : null,
+                    core: lookupName ? coreInfoFor(lookupName) : null
                 });
                 setSearch('');
                 setTimeout(() => scanRef.current && scanRef.current.focus(), 0);
@@ -6302,6 +6437,12 @@
                                 {scanResult.name && <div className="scan-name">{scanResult.name}</div>}
                                 <div className="scan-status">{scanResult.headline}</div>
                                 <div className="scan-detail">EID {scanResult.eid}{scanResult.detail ? ` · ${scanResult.detail}` : ''}</div>
+                                {scanResult.core && scanResult.core.leads.length > 0 && <div className="scan-detail">Core lead: <strong>{scanResult.core.leads.join(', ')}</strong></div>}
+                                {scanResult.core && scanResult.core.flags.length > 0 && (
+                                    <div className="scan-detail" style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '4px' }}>
+                                        {scanResult.core.flags.map(fid => { const f = AVAILABLE_FLAGS.find(x => x.id === fid); return f ? <span key={fid} className={`flag-badge ${f.className}`}>{f.label}</span> : null; })}
+                                    </div>
+                                )}
                                 {scanResult.lastLead && <div className="scan-detail">↳ Usually works for: <strong>{scanResult.lastLead}</strong></div>}
                             </div>
                         )}
@@ -6461,6 +6602,7 @@
                                     <tr>
                                         <th>Employee ID</th>
                                         <th>Name</th>
+                                        <th>Core Lead / Skills</th>
                                         <th>Status</th>
                                         <th>Susp / DNR</th>
                                         <th>Assigned Shift</th>
@@ -6472,6 +6614,22 @@
                                         <tr key={a.employeeId}>
                                             <td style={{ fontFamily: 'monospace', color: '#6b7280', fontSize: '11px' }}>{a.employeeId}</td>
                                             <td style={{ fontWeight: '500' }}>{a.fullName}</td>
+                                            <td>
+                                                {(() => {
+                                                    const ci = coreInfoFor(a.fullName);
+                                                    if (!ci || (ci.leads.length === 0 && ci.flags.length === 0)) return <span style={{ color: '#d1d5db' }}>—</span>;
+                                                    return (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                                            {ci.leads.length > 0 && <span style={{ fontSize: '11px', color: '#374151', fontWeight: 600 }}>↳ {ci.leads.join(', ')}</span>}
+                                                            {ci.flags.length > 0 && (
+                                                                <span style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                                                                    {ci.flags.map(fid => { const f = AVAILABLE_FLAGS.find(x => x.id === fid); return f ? <span key={fid} className={`flag-badge ${f.className}`}>{f.label}</span> : null; })}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </td>
                                             <td>
                                                 {a.isActive
                                                     ? <span className="roster-active-badge">Active</span>
