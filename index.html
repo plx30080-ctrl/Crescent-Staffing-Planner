@@ -885,15 +885,20 @@
 
         .convert-btn {
             flex-shrink: 0;
-            font-size: 10px;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
             font-weight: 700;
+            line-height: 1;
             color: white;
             background: #d946ef;
             border: none;
             border-radius: 4px;
-            padding: 3px 7px;
+            padding: 0;
             cursor: pointer;
-            white-space: nowrap;
         }
         .convert-btn:hover:not(:disabled) { background: #c026d3; }
         .convert-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -4297,9 +4302,10 @@
                                                 className="convert-btn"
                                                 onClick={() => onConvertCrescent(line.id, position.id)}
                                                 disabled={line.isCut || isLocked}
+                                                aria-label="Convert to a regular line fill"
                                                 title="Convert to a regular line fill (moves into an opening)"
                                             >
-                                                Convert
+                                                ↑
                                             </button>
                                         ) : (
                                             <div className="position-checkbox">
