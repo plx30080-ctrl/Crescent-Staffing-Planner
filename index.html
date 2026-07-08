@@ -883,6 +883,21 @@
             letter-spacing: 0.5px;
         }
 
+        .convert-btn {
+            flex-shrink: 0;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            background: #d946ef;
+            border: none;
+            border-radius: 4px;
+            padding: 3px 7px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .convert-btn:hover:not(:disabled) { background: #c026d3; }
+        .convert-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
         .position-slot.drag-over {
             background: #e0e7ff;
             border-color: #667eea;
@@ -1135,6 +1150,9 @@
         }
 
         @media print {
+            /* Landscape so lines flow across the page like the Excel export, and only
+               break onto a new page when a whole row of lines won't fit. */
+            @page { size: landscape; margin: 0.4in; }
             body { padding: 0; background: white; font-size: 11px; }
             .header, .tabs, .firebase-status, .undo-banner, .bulk-action-bar,
             .duplicate-warning button, .line-edit-controls, .lock-banner button { display: none !important; }
@@ -1142,13 +1160,33 @@
             .content { padding: 8px; }
             .stats-bar { border: 1px solid #ccc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .stats-bar button, .stats-bar .save-status, .stats-bar .save-error { display: none !important; }
-            .staffing-layout { height: auto !important; overflow: visible !important; }
-            .lines-container { overflow: visible !important; flex-wrap: wrap; }
-            .line-column { break-inside: avoid; border: 1px solid #333; min-width: 140px; }
-            .waitlist-sidebar { break-inside: avoid; border: 1px solid #333; }
-            .position-input { border: none !important; box-shadow: none !important; padding: 2px !important; }
-            .waitlist-input { border: none !important; box-shadow: none !important; padding: 2px !important; }
-            .waitlist-controls button { display: none !important; }
+            /* Let the layout grow to its natural height and wrap horizontally. */
+            .staffing-layout { display: block !important; height: auto !important; overflow: visible !important; }
+            .lines-container {
+                display: flex !important; flex-wrap: wrap !important; align-items: flex-start !important;
+                overflow: visible !important; gap: 6px !important;
+            }
+            .line-column {
+                break-inside: avoid; page-break-inside: avoid; border: 1px solid #333;
+                width: 175px !important; min-width: 150px !important; height: auto !important;
+                overflow: visible !important;
+            }
+            /* Show every position — never clip or scroll a line's list when printing. */
+            .positions-list { overflow: visible !important; height: auto !important; flex: none !important; }
+            .line-lead { max-height: none !important; overflow: visible !important; }
+            .waitlist-sidebar { break-inside: avoid; page-break-inside: avoid; border: 1px solid #333; height: auto !important; width: 175px !important; }
+            .waitlist-items { overflow: visible !important; height: auto !important; }
+            .position-input { border: none !important; box-shadow: none !important; padding: 2px !important; background: transparent !important; }
+            .waitlist-input { border: none !important; box-shadow: none !important; padding: 2px !important; background: transparent !important; }
+            .waitlist-controls button, .waitlist-header button, .convert-btn, .position-checkbox { display: none !important; }
+            .add-line-column { display: none !important; }
+            /* Print the fill/new/crescent color coding (matches the export's shading). */
+            .line-header, .line-column, .position-slot, .position-slot.filled,
+            .position-slot.new-associate, .position-slot.crescent-slot,
+            .position-slot.crescent-slot.filled, .crescent-divider, .status-pill,
+            .waitlist-sidebar, .waitlist-header {
+                -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+            }
             .print-header { display: block !important; text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 8px; }
         }
         .print-header { display: none; }
@@ -1344,6 +1382,19 @@
         };
         // Default empty "Indirect" slots (off-floor: sanitation/office/forklift).
         const makeIndirectSlots = (n) => Array.from({ length: n }, (_, i) => ({ id: Date.now() + Math.random() + i, name: '' }));
+
+        // Reorder a line's positions so filled regular slots come first, then any
+        // open (empty) regular slots, then Crescent staff at the very bottom. This
+        // keeps open slots grouped above "Crescent Staff" so the number left to
+        // fill is always visible at a glance, and keeps Crescent positions
+        // contiguous at the end (which the divider rendering relies on).
+        const normalizeLinePositions = (positions) => {
+            const regular = positions.filter(p => !p.isCrescent);
+            const crescent = positions.filter(p => p.isCrescent);
+            const filled = regular.filter(p => p.name.trim());
+            const open = regular.filter(p => !p.name.trim());
+            return [...filled, ...open, ...crescent];
+        };
 
         // Surname sort key (case-insensitive) for alphabetizing by last name.
         const lastNameKey = (name) => {
@@ -2187,22 +2238,55 @@
             const handleUpdatePosition = (lineId, positionId, name, isNew) => {
                 setLines(prev => prev.map(line => {
                     if (line.id === lineId) {
-                        return {
-                            ...line,
-                            positions: line.positions.map(pos => {
-                                if (pos.id === positionId) {
-                                    // If this was a Crescent slot and the name is being cleared or changed,
-                                    // demote it to a regular open slot so it can be filled normally.
-                                    const isCrescent = pos.isCrescent && name.trim() === pos.name.trim() && name.trim() !== ''
-                                        ? true
-                                        : false;
-                                    return { ...pos, name, isNew, isCrescent };
-                                }
-                                return pos;
-                            })
-                        };
+                        const prevPos = line.positions.find(p => p.id === positionId);
+                        // A name is being removed if the slot had a name and now doesn't.
+                        const nameCleared = prevPos && prevPos.name.trim() !== '' && name.trim() === '';
+                        let positions = line.positions.map(pos => {
+                            if (pos.id === positionId) {
+                                // If this was a Crescent slot and the name is being cleared or changed,
+                                // demote it to a regular open slot so it can be filled normally.
+                                const isCrescent = pos.isCrescent && name.trim() === pos.name.trim() && name.trim() !== ''
+                                    ? true
+                                    : false;
+                                return { ...pos, name, isNew, isCrescent };
+                            }
+                            return pos;
+                        });
+                        // When a name is removed, sink the now-open slot to the bottom of
+                        // the line (above Crescent staff) so open slots stay grouped.
+                        if (nameCleared) positions = normalizeLinePositions(positions);
+                        return { ...line, positions };
                     }
                     return line;
+                }));
+            };
+
+            // Convert a Crescent staff member into a regular line fill: move them out
+            // of the Crescent group and into a line opening (turns green / counts
+            // toward the line's fill). Fills the first open slot if one exists;
+            // otherwise creates one for them (bumping the needed count).
+            const handleConvertCrescent = (lineId, positionId) => {
+                setLines(prev => prev.map(line => {
+                    if (line.id !== lineId) return line;
+                    const cres = line.positions.find(p => p.id === positionId);
+                    if (!cres || !cres.isCrescent) return line;
+
+                    // Drop the Crescent slot.
+                    let positions = line.positions.filter(p => p.id !== positionId);
+                    const openSlot = positions.find(p => !p.isCrescent && !p.name.trim());
+                    let needed = line.needed;
+                    if (openSlot) {
+                        positions = positions.map(p =>
+                            p.id === openSlot.id
+                                ? { ...p, name: cres.name, isNew: false, isCrescent: false }
+                                : p
+                        );
+                    } else {
+                        // No opening available — create one and count it.
+                        positions.push({ id: Date.now() + Math.random(), name: cres.name, isNew: false, isCrescent: false });
+                        needed = (parseInt(line.needed) || 0) + 1;
+                    }
+                    return { ...line, needed, positions: normalizeLinePositions(positions) };
                 }));
             };
 
@@ -2373,31 +2457,71 @@
                             name: sourcePosition.name,
                             isNew: sourcePosition.isNew
                         }]);
-                        handleUpdatePosition(source.lineId, source.positionId, '', false);
+                        if (sourcePosition.isCrescent) {
+                            // A Crescent slot is an extra, not a fixed opening — remove it
+                            // entirely rather than leaving a phantom empty regular slot.
+                            setLines(prev => prev.map(line =>
+                                line.id === source.lineId
+                                    ? { ...line, positions: line.positions.filter(p => p.id !== source.positionId) }
+                                    : line
+                            ));
+                        } else {
+                            handleUpdatePosition(source.lineId, source.positionId, '', false);
+                        }
                     }
                 } else if (source.type === 'position' && target.type === 'position') {
-                    // Swap positions - use a single state update to avoid race conditions
+                    const sourceLine0 = lines.find(l => l.id === source.lineId);
+                    const sourcePos0 = sourceLine0?.positions.find(p => p.id === source.positionId);
+
+                    // A Crescent worker dragged to a DIFFERENT line keeps their Crescent
+                    // status/color and drops in at the bottom under "Crescent Staff"
+                    // (rather than becoming a regular fill on the target line).
+                    if (sourcePos0 && sourcePos0.isCrescent && source.lineId !== target.lineId) {
+                        setLines(prev => prev.map(line => {
+                            if (line.id === source.lineId) {
+                                // Remove the Crescent slot from the source line.
+                                return { ...line, positions: line.positions.filter(p => p.id !== source.positionId) };
+                            }
+                            if (line.id === target.lineId) {
+                                const moved = {
+                                    id: Date.now() + Math.random(),
+                                    name: sourcePos0.name,
+                                    isNew: sourcePos0.isNew,
+                                    isCrescent: true
+                                };
+                                return { ...line, positions: normalizeLinePositions([...line.positions, moved]) };
+                            }
+                            return line;
+                        }));
+                        return;
+                    }
+                    // Dragging a Crescent worker within the same line: no-op (use Convert
+                    // to turn them into a regular fill).
+                    if (sourcePos0 && sourcePos0.isCrescent && source.lineId === target.lineId) {
+                        return;
+                    }
+
+                    // Swap positions - use a single state update to avoid race conditions,
+                    // then normalize so any slot left open sinks to the bottom of its line.
                     setLines(prev => prev.map(line => {
                         if (line.id === source.lineId || line.id === target.lineId) {
-                            return {
-                                ...line,
-                                positions: line.positions.map(pos => {
-                                    if (line.id === source.lineId && pos.id === source.positionId) {
-                                        // Replace source with target's content
-                                        const targetLine = prev.find(l => l.id === target.lineId);
-                                        const targetPos = targetLine?.positions.find(p => p.id === target.positionId);
-                                        // Clear isCrescent since the person occupying this slot is changing
-                                        return targetPos ? { ...pos, name: targetPos.name, isNew: targetPos.isNew, isCrescent: false } : pos;
-                                    } else if (line.id === target.lineId && pos.id === target.positionId) {
-                                        // Replace target with source's content
-                                        const sourceLine = prev.find(l => l.id === source.lineId);
-                                        const sourcePos = sourceLine?.positions.find(p => p.id === source.positionId);
-                                        // Clear isCrescent since the person occupying this slot is changing
-                                        return sourcePos ? { ...pos, name: sourcePos.name, isNew: sourcePos.isNew, isCrescent: false } : pos;
-                                    }
-                                    return pos;
-                                })
-                            };
+                            const positions = line.positions.map(pos => {
+                                if (line.id === source.lineId && pos.id === source.positionId) {
+                                    // Replace source with target's content
+                                    const targetLine = prev.find(l => l.id === target.lineId);
+                                    const targetPos = targetLine?.positions.find(p => p.id === target.positionId);
+                                    // Clear isCrescent since the person occupying this slot is changing
+                                    return targetPos ? { ...pos, name: targetPos.name, isNew: targetPos.isNew, isCrescent: false } : pos;
+                                } else if (line.id === target.lineId && pos.id === target.positionId) {
+                                    // Replace target with source's content
+                                    const sourceLine = prev.find(l => l.id === source.lineId);
+                                    const sourcePos = sourceLine?.positions.find(p => p.id === source.positionId);
+                                    // Clear isCrescent since the person occupying this slot is changing
+                                    return sourcePos ? { ...pos, name: sourcePos.name, isNew: sourcePos.isNew, isCrescent: false } : pos;
+                                }
+                                return pos;
+                            });
+                            return { ...line, positions: normalizeLinePositions(positions) };
                         }
                         return line;
                     }));
@@ -2845,6 +2969,7 @@
                                 onUndo={handleUndo}
                                 onToggleLock={handleToggleLock}
                                 onUpdatePosition={handleUpdatePosition}
+                                onConvertCrescent={handleConvertCrescent}
                                 onUpdateWaitlistItem={handleUpdateWaitlistItem}
                                 onAddWaitlistItem={handleAddWaitlistItem}
                                 onQuickAddWaitlist={handleQuickAddWaitlist}
@@ -3154,6 +3279,7 @@
             onUndo,
             onToggleLock,
             onUpdatePosition,
+            onConvertCrescent,
             onUpdateWaitlistItem,
             onAddWaitlistItem,
             onQuickAddWaitlist,
@@ -3310,30 +3436,26 @@
                 if (toMove.length > 0) {
                     const newWaitlistItems = toMove.map(item => ({ id: Date.now() + Math.random(), name: item.name, isNew: item.isNew }));
                     setWaitlist(prev => [...prev, ...newWaitlistItems]);
-                    setLines(prev => prev.map(line => ({
-                        ...line,
-                        positions: line.positions.map(pos => {
-                            if (selectedPositions.find(s => s.lineId === line.id && s.positionId === pos.id)) {
-                                return { ...pos, name: '', isNew: false };
-                            }
-                            return pos;
-                        })
-                    })));
+                    setLines(prev => prev.map(line => clearSelectedPositions(line)));
                 }
                 setSelectedPositions([]);
                 setSelectedWaitlist([]);
             };
 
+            // Clear the selected slots on a line: drop selected Crescent slots entirely
+            // (they're extras, not fixed openings) and empty selected regular slots,
+            // then sink the freed openings to the bottom (above Crescent staff).
+            const clearSelectedPositions = (line) => {
+                const isSelected = (pos) => selectedPositions.find(s => s.lineId === line.id && s.positionId === pos.id);
+                if (!line.positions.some(isSelected)) return line;
+                const positions = line.positions
+                    .filter(pos => !(pos.isCrescent && isSelected(pos)))
+                    .map(pos => isSelected(pos) ? { ...pos, name: '', isNew: false } : pos);
+                return { ...line, positions: normalizeLinePositions(positions) };
+            };
+
             const handleBulkClear = () => {
-                setLines(prev => prev.map(line => ({
-                    ...line,
-                    positions: line.positions.map(pos => {
-                        if (selectedPositions.find(s => s.lineId === line.id && s.positionId === pos.id)) {
-                            return { ...pos, name: '', isNew: false };
-                        }
-                        return pos;
-                    })
-                })));
+                setLines(prev => prev.map(line => clearSelectedPositions(line)));
                 setWaitlist(prev => prev.map(item => {
                     if (selectedWaitlist.includes(item.id)) {
                         return { ...item, name: '', isNew: false };
@@ -3460,6 +3582,7 @@
                                     selectedPositions={selectedPositions}
                                     onTogglePositionSelect={togglePositionSelect}
                                     onUpdatePosition={onUpdatePosition}
+                                    onConvertCrescent={onConvertCrescent}
                                     onUpdateLine={onUpdateLine}
                                     onRemoveLine={onRemoveLine}
                                     onToggleCutLine={onToggleCutLine}
@@ -3471,7 +3594,7 @@
                                     lastFirst={lastFirst}
                                 />
                             ))}
-                            <div className="line-column" style={{ minWidth: '120px', width: '120px', justifyContent: 'center', alignItems: 'center', cursor: isLocked ? 'not-allowed' : 'pointer', background: '#f9fafb', opacity: isLocked ? 0.5 : 1 }} onClick={isLocked ? null : onAddLine}>
+                            <div className="line-column add-line-column" style={{ minWidth: '120px', width: '120px', justifyContent: 'center', alignItems: 'center', cursor: isLocked ? 'not-allowed' : 'pointer', background: '#f9fafb', opacity: isLocked ? 0.5 : 1 }} onClick={isLocked ? null : onAddLine}>
                                 <div style={{ textAlign: 'center', color: '#667eea', fontSize: '14px', fontWeight: '600' }}>
                                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>+</div>
                                     <div>Add Line</div>
@@ -3842,7 +3965,7 @@
             );
         }
 
-        function LineColumn({ line, isLocked, coreAssociates, roster, selectMode, selectedPositions, onTogglePositionSelect, onUpdatePosition, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop, statusNameIndex, workHistoryIndex, lastFirst }) {
+        function LineColumn({ line, isLocked, coreAssociates, roster, selectMode, selectedPositions, onTogglePositionSelect, onUpdatePosition, onConvertCrescent, onUpdateLine, onRemoveLine, onToggleCutLine, onDragStart, onDragOver, onDrop, statusNameIndex, workHistoryIndex, lastFirst }) {
             const [isEditing, setIsEditing] = useState(false);
             const [editLetter, setEditLetter] = useState(line.letter);
             const [editLeads, setEditLeads] = useState((line.leads || []).join(', '));
@@ -4126,9 +4249,6 @@
                                 ? line.positions.slice(0, index).filter(p => p.isCrescent).length + 1
                                 : null;
                             const posStatus = lookupNameStatus(statusNameIndex, position.name);
-                            const leadHint = lookupWorkHistory(workHistoryIndex, position.name);
-                            const leadDiff = leadHint && !(line.leads || []).some(l =>
-                                leadHint.leads.some(hl => normalizeName(hl) === normalizeName(l)));
 
                             return (
                                 <React.Fragment key={position.id}>
@@ -4165,23 +4285,32 @@
                                                 placeholder="Name..."
                                                 disabled={line.isCut || isLocked}
                                             />
-                                            {leadHint && (
-                                                <div className={`lead-hint ${leadDiff ? 'diff' : ''}`} title={`Last worked for ${leadHint.leadLabel} on ${leadHint.date} (Line ${leadHint.letter})`}>
-                                                    ↳ {leadHint.leadLabel}
-                                                </div>
-                                            )}
                                         </div>
                                         {posStatus && posStatus.status && (
                                             <span className={`status-pill ${posStatus.status.className}`} title={posStatus.status.label}>{posStatus.status.shortLabel}</span>
                                         )}
-                                        <div className="position-checkbox">
-                                            <input
-                                                type="checkbox"
-                                                checked={position.isNew}
-                                                onChange={(e) => onUpdatePosition(line.id, position.id, position.name, e.target.checked)}
+                                        {position.isCrescent ? (
+                                            // Crescent workers are never new starts, so instead of the
+                                            // "new" checkbox they get a Convert button that moves them
+                                            // into a regular line opening (turns green, leaves Crescent).
+                                            <button
+                                                className="convert-btn"
+                                                onClick={() => onConvertCrescent(line.id, position.id)}
                                                 disabled={line.isCut || isLocked}
-                                            />
-                                        </div>
+                                                title="Convert to a regular line fill (moves into an opening)"
+                                            >
+                                                Convert
+                                            </button>
+                                        ) : (
+                                            <div className="position-checkbox">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={position.isNew}
+                                                    onChange={(e) => onUpdatePosition(line.id, position.id, position.name, e.target.checked)}
+                                                    disabled={line.isCut || isLocked}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 </React.Fragment>
                             );
