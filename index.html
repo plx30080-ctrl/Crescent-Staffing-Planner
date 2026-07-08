@@ -1154,10 +1154,13 @@
             }
         }
 
+        /* Landscape for printing. This MUST be a top-level @page rule — Chrome ignores
+           an @page nested inside @media print, which is why the print orientation
+           previously stayed portrait. (The Print button renders its own landscape
+           document; this covers a manual Cmd/Ctrl+P of the live page.) */
+        @page { size: landscape; margin: 0.4in; }
+
         @media print {
-            /* Landscape so lines flow across the page like the Excel export, and only
-               break onto a new page when a whole row of lines won't fit. */
-            @page { size: landscape; margin: 0.4in; }
             body { padding: 0; background: white; font-size: 11px; }
             .header, .tabs, .firebase-status, .undo-banner, .bulk-action-bar,
             .duplicate-warning button, .line-edit-controls, .lock-banner button { display: none !important; }
@@ -1165,16 +1168,19 @@
             .content { padding: 8px; }
             .stats-bar { border: 1px solid #ccc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .stats-bar button, .stats-bar .save-status, .stats-bar .save-error { display: none !important; }
-            /* Let the layout grow to its natural height and wrap horizontally. */
+            /* Let the layout grow to its natural height. Use inline-block cards (not
+               flexbox) so Chrome paginates them reliably — flex containers stack
+               one-per-page when printing. */
             .staffing-layout { display: block !important; height: auto !important; overflow: visible !important; }
             .lines-container {
-                display: flex !important; flex-wrap: wrap !important; align-items: flex-start !important;
-                overflow: visible !important; gap: 6px !important;
+                display: block !important; font-size: 0 !important;
+                overflow: visible !important;
             }
             .line-column {
+                display: inline-block !important; vertical-align: top !important; font-size: 12px;
                 break-inside: avoid; page-break-inside: avoid; border: 1px solid #333;
                 width: 175px !important; min-width: 150px !important; height: auto !important;
-                overflow: visible !important;
+                overflow: visible !important; margin: 0 5px 6px 0 !important;
             }
             /* Show every position — never clip or scroll a line's list when printing. */
             .positions-list { overflow: visible !important; height: auto !important; flex: none !important; }
@@ -2801,6 +2807,113 @@
                 }
             };
 
+            // Print via a purpose-built landscape document rendered into a hidden
+            // iframe. We do NOT print the live flex DOM: Chrome ignores an @page rule
+            // nested in @media print (so orientation stayed portrait) and paginates
+            // flex containers unreliably (lines stacked one-per-page). A clean document
+            // with a top-level @page and inline-block cards flows the lines horizontally
+            // and wraps them across pages — matching the Excel export.
+            const handlePrint = () => {
+                const lastFirst = storage.load('nameDisplayLastFirst', false);
+                const fmtName = (n) => lastFirst ? formatLastFirst(n) : n;
+                const esc = (s) => (s || '').toString().replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+                const activeLines = lines.filter(l => !l.isCut);
+                const cutLines = lines.filter(l => l.isCut);
+                const totalPositions = activeLines.reduce((s, l) => s + (parseInt(l.needed) || 0), 0);
+                const filledPositions = activeLines.reduce((s, l) => s + l.positions.filter(p => p.name.trim() && !p.isCrescent).length, 0);
+                const newAssociates = activeLines.reduce((s, l) => s + l.positions.filter(p => p.name.trim() && p.isNew && !p.isCrescent).length, 0);
+                const waitingCount = waitlist.filter(w => w.name.trim()).length;
+                const indirectNames = (indirect || []).filter(i => i.name.trim());
+
+                const posRow = (p, num, isCrescent) => {
+                    const filled = p.name.trim() !== '';
+                    const cls = isCrescent ? 'cres' : (!filled ? 'open' : (p.isNew ? 'new' : 'fill'));
+                    const label = isCrescent ? ('C' + num) : num;
+                    return `<div class="pos ${cls}"><span class="n">${label}</span><span class="nm">${filled ? esc(fmtName(p.name)) + (p.isNew && !isCrescent ? ' ★' : '') : ''}</span></div>`;
+                };
+
+                const lineCard = (l) => {
+                    const leads = (l.leads || (l.lead ? [l.lead] : [])).join(', ') || 'No lead';
+                    const regular = l.positions.filter(p => !p.isCrescent);
+                    const crescent = l.positions.filter(p => p.isCrescent);
+                    const fc = regular.filter(p => p.name.trim()).length;
+                    let rows = regular.map((p, i) => posRow(p, i + 1, false)).join('');
+                    if (crescent.length) {
+                        rows += `<div class="cresdiv">Crescent Staff</div>`;
+                        rows += crescent.map((p, i) => posRow(p, i + 1, true)).join('');
+                    }
+                    return `<div class="card ${l.isCut ? 'cut' : ''}">
+                        <div class="hd ${l.isCut ? 'cuthd' : ''}">
+                            <div class="lt">Line ${esc(l.letter || '?')}${l.isCut ? ' (CUT)' : ''}</div>
+                            <div class="ld">${esc(leads)}</div>
+                            <div class="st">${fc} / ${l.needed} filled${crescent.length ? ' <b>+' + crescent.length + 'C</b>' : ''}</div>
+                        </div>
+                        <div class="body">${rows}</div>
+                    </div>`;
+                };
+
+                const waitCard = waitingCount ? `<div class="card wait">
+                        <div class="hd waithd"><div class="lt">Waitlist</div><div class="st">${waitingCount} on-call</div></div>
+                        <div class="body">${waitlist.filter(w => w.name.trim()).map((w, i) => `<div class="pos ${w.isNew ? 'new' : 'fill'}"><span class="n">${i + 1}</span><span class="nm">${esc(fmtName(w.name))}${w.isNew ? ' ★' : ''}</span></div>`).join('')}</div>
+                    </div>` : '';
+
+                const cardsHtml = lines.map(lineCard).join('') + waitCard;
+                const indirectHtml = indirectNames.length ? `<div class="indirect"><div class="ihd">Indirect — Off-Floor (not counted in fill)</div><div class="irow">${indirectNames.map(i => `<span class="ichip">${esc(fmtName(i.name))}</span>`).join('')}</div></div>` : '';
+
+                const html = `<!doctype html><html><head><meta charset="utf-8"><title>Staffing ${esc(currentDate)} ${esc(currentShift)}</title>
+<style>
+  @page { size: landscape; margin: 0.4in; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; color: #111827; }
+  .title { text-align: center; font-size: 16px; font-weight: 700; margin: 0 0 4px; }
+  .sub { text-align: center; font-size: 11px; color: #374151; margin-bottom: 8px; }
+  .sub b { color: #059669; }
+  .grid { font-size: 0; }
+  .card { display: inline-block; vertical-align: top; width: 172px; margin: 0 5px 8px 0; border: 1px solid #333; border-radius: 4px; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
+  .hd { background: #374151; color: #fff; padding: 4px 6px; text-align: center; }
+  .hd.cuthd { background: #991b1b; }
+  .hd.waithd { background: #92400e; }
+  .lt { font-size: 13px; font-weight: 700; }
+  .ld { font-size: 9px; opacity: .95; line-height: 1.2; }
+  .st { font-size: 9px; opacity: .95; }
+  .body { padding: 3px; }
+  .pos { display: flex; align-items: center; gap: 4px; border: 1px solid #d1d5db; border-radius: 3px; padding: 2px 4px; margin-bottom: 2px; font-size: 11px; min-height: 18px; }
+  .pos .n { min-width: 15px; font-weight: 600; color: #6b7280; font-size: 9px; text-align: center; }
+  .pos .nm { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .pos.fill { background: #ecfdf5; border-color: #10b981; }
+  .pos.new  { background: #fef9c3; border-color: #eab308; }
+  .pos.open { background: #fff; }
+  .pos.cres { background: #fce7f3; border-color: #d946ef; border-left: 3px solid #d946ef; }
+  .cresdiv { font-size: 9px; font-weight: 700; color: #831843; background: #fce7f3; border: 1px solid #f9a8d4; border-radius: 3px; padding: 2px; margin: 3px 0 2px; text-align: center; }
+  .card.cut { opacity: .75; border-color: #ef4444; }
+  .indirect { margin-top: 6px; border: 1px solid #3730a3; border-radius: 4px; overflow: hidden; break-inside: avoid; }
+  .ihd { background: #3730a3; color: #fff; font-size: 11px; font-weight: 700; padding: 4px 6px; }
+  .irow { padding: 4px 6px; }
+  .ichip { display: inline-block; font-size: 11px; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 3px; padding: 2px 6px; margin: 2px 4px 2px 0; }
+</style></head><body>
+  <div class="title">Crescent Staffing Planner — ${esc(currentDate)} — ${esc(currentShift)} Shift</div>
+  <div class="sub"><b>${filledPositions}</b> / ${totalPositions} filled${newAssociates ? ' • ' + newAssociates + ' new' : ''}${cutLines.length ? ' • ' + cutLines.length + ' cut' : ''}${waitingCount ? ' • ' + waitingCount + ' waiting' : ''}</div>
+  <div class="grid">${cardsHtml}</div>
+  ${indirectHtml}
+</body></html>`;
+
+                const iframe = document.createElement('iframe');
+                iframe.setAttribute('aria-hidden', 'true');
+                iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+                document.body.appendChild(iframe);
+                const doc = iframe.contentWindow.document;
+                doc.open(); doc.write(html); doc.close();
+                const done = () => { try { document.body.removeChild(iframe); } catch (e) {} };
+                iframe.contentWindow.onafterprint = done;
+                setTimeout(() => {
+                    iframe.contentWindow.focus();
+                    iframe.contentWindow.print();
+                    // Fallback cleanup in case onafterprint doesn't fire.
+                    setTimeout(done, 60000);
+                }, 250);
+            };
+
             const handleClearAll = () => {
                 if (confirm('Clear current shift data?')) {
                     pushUndo('Shift data cleared');
@@ -2895,7 +3008,7 @@
                             />
                             {lines.length > 0 && (
                                 <>
-                                    <button className="btn btn-secondary" onClick={() => window.print()}>
+                                    <button className="btn btn-secondary" onClick={handlePrint}>
                                         Print
                                     </button>
                                     <button className="btn btn-secondary" onClick={handleExport}>
