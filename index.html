@@ -2870,22 +2870,25 @@
   .sub { text-align: center; font-size: 11px; color: #374151; margin-bottom: 8px; }
   .sub b { color: #059669; }
   .grid { font-size: 0; }
-  .card { display: inline-block; vertical-align: top; width: 172px; margin: 0 5px 8px 0; border: 1px solid #333; border-radius: 4px; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
-  .hd { background: #374151; color: #fff; padding: 4px 6px; text-align: center; }
+  /* Cards are kept compact so a full row of tall lines still fits under the
+     header on the first page (inline-block rows paginate atomically — an
+     oversized first row would otherwise jump to page 2, leaving page 1 blank). */
+  .card { display: inline-block; vertical-align: top; width: 168px; margin: 0 4px 5px 0; border: 1px solid #333; border-radius: 4px; overflow: hidden; break-inside: avoid; page-break-inside: avoid; }
+  .hd { background: #374151; color: #fff; padding: 2px 5px; text-align: center; }
   .hd.cuthd { background: #991b1b; }
   .hd.waithd { background: #92400e; }
-  .lt { font-size: 13px; font-weight: 700; }
-  .ld { font-size: 9px; opacity: .95; line-height: 1.2; }
-  .st { font-size: 9px; opacity: .95; }
-  .body { padding: 3px; }
-  .pos { display: flex; align-items: center; gap: 4px; border: 1px solid #d1d5db; border-radius: 3px; padding: 2px 4px; margin-bottom: 2px; font-size: 11px; min-height: 18px; }
-  .pos .n { min-width: 15px; font-weight: 600; color: #6b7280; font-size: 9px; text-align: center; }
+  .lt { font-size: 12px; font-weight: 700; line-height: 1.15; }
+  .ld { font-size: 8px; opacity: .95; line-height: 1.15; }
+  .st { font-size: 8px; opacity: .95; }
+  .body { padding: 2px; }
+  .pos { display: flex; align-items: center; gap: 3px; border: 1px solid #d1d5db; border-radius: 2px; padding: 0 3px; margin-bottom: 1px; font-size: 10px; min-height: 15px; line-height: 1.25; }
+  .pos .n { min-width: 13px; font-weight: 600; color: #6b7280; font-size: 8px; text-align: center; }
   .pos .nm { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .pos.fill { background: #ecfdf5; border-color: #10b981; }
   .pos.new  { background: #fef9c3; border-color: #eab308; }
   .pos.open { background: #fff; }
   .pos.cres { background: #fce7f3; border-color: #d946ef; border-left: 3px solid #d946ef; }
-  .cresdiv { font-size: 9px; font-weight: 700; color: #831843; background: #fce7f3; border: 1px solid #f9a8d4; border-radius: 3px; padding: 2px; margin: 3px 0 2px; text-align: center; }
+  .cresdiv { font-size: 8px; font-weight: 700; color: #831843; background: #fce7f3; border: 1px solid #f9a8d4; border-radius: 2px; padding: 1px; margin: 2px 0 1px; text-align: center; }
   .card.cut { opacity: .75; border-color: #ef4444; }
   .indirect { margin-top: 6px; border: 1px solid #3730a3; border-radius: 4px; overflow: hidden; break-inside: avoid; }
   .ihd { background: #3730a3; color: #fff; font-size: 11px; font-weight: 700; padding: 4px 6px; }
