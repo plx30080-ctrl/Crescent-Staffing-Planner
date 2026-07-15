@@ -122,6 +122,14 @@ Both bypass the security rules in Section 2, so the flow keeps working after you
 
 **Goal:** stop anyone with the URL from reading suspension/DNR data. Do this **after** Auth (Section 3) works, or you’ll lock yourself out of the app.
 
+> **⚠️ Heads-up with open self-signup.** The app now lets anyone create their own
+> account (see Section 3). With that on, `auth != null` below means "any registered
+> account" — **not** "your team only," because anyone who reaches the URL can register
+> and pass this rule. To truly restrict to your team you must either (a) restrict who
+> can sign up (work-email domain or invite code) **and** mirror that in these rules
+> (e.g. `"auth.token.email.endsWith('@yourcompany.com')"`), or (b) keep an allowlist
+> node the rules check. Ask and I'll wire up whichever you want.
+
 ### Steps
 
 1. Firebase Console → **Realtime Database** → **Rules** tab.
@@ -180,17 +188,24 @@ The login gate is implemented:
 - The `firebase-auth-compat.js` SDK is loaded alongside the app/database SDKs.
 - A `Root` component listens to `firebase.auth().onAuthStateChanged`. While it's
   resolving it shows *Loading…*; if no user is signed in it renders a **Sign In**
-  screen (email + password, plus **Forgot password?** which sends a reset email);
-  once signed in it renders the app.
+  screen; once signed in it renders the app.
+- The Sign In screen has a **Create one** toggle → a self-service **Create Account**
+  form (email + password + confirm). New accounts are created with
+  `createUserWithEmailAndPassword` and signed in immediately. **Forgot password?**
+  sends a reset email.
 - The header shows the signed-in email and a **Sign Out** button.
 - **Fallback:** if Firebase isn't configured (or the auth SDK fails to load), the
   gate is skipped and the app runs ungated in localStorage-only mode — so a bad
   network can't fully lock people out during offline use.
 
-> **Before anyone can sign in**, you must (in the Firebase console) enable the
-> **Email/Password** provider and **create at least one user** (steps above). Until
-> then, sign-in fails with *"Email/Password sign-in isn't enabled in Firebase yet."*
-> Do this **before** locking the rules in Section 2, or you'll lock everyone out.
+> **To turn this on**, enable the **Email/Password** provider in the Firebase console
+> (Authentication → Sign-in method). You no longer need to hand-create each user —
+> the team self-registers via **Create one**. If the provider is off, both sign-in and
+> sign-up fail with *"Email/Password accounts aren't enabled in Firebase yet."*
+>
+> **Signup is open** (any email can register), by request. That means the Section 2
+> `auth != null` rule does **not** limit access to your team — see the heads-up there
+> before locking the rules.
 
 ### Verify
 
