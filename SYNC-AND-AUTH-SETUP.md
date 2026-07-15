@@ -16,8 +16,10 @@ The three depend on each other, so sequence matters:
 
 > **App code status.** The load-time resolver that turns the synced `statusRaw`
 > rows into statuses is **built** — the sync takes effect automatically (open Badge
-> Check screens update live when the flow runs). The remaining app-code item is the
-> **Auth login gate**, marked **[needs app code]** in Section 3 — ask and I'll add it.
+> Check screens update live when the flow runs). The **Auth login gate is now built
+> too** (Section 3): the app shows an email/password sign-in screen and a Sign Out
+> button. Nothing further is needed in the code — the remaining work is all in the
+> Firebase console (enable the provider, create accounts) and then locking the rules.
 
 Your database URL (used throughout):
 `https://staffingtool-1ab4f-default-rtdb.firebaseio.com`
@@ -171,17 +173,24 @@ Start with **Email/Password**; move to **Microsoft** later if you want one-click
 2. **Sign-in method** tab → enable **Email/Password** → Save.
 3. **Users** tab → **Add user** for each manager/supervisor (email + temporary password). Share credentials securely; have them change the password.
 
-### Wire it into the app  **[needs app code]**
+### Wire it into the app  **[done — built into `index.html`]**
 
-The page currently has no login screen — Auth does nothing until one is added. This is a change to `index.html`:
+The login gate is implemented:
 
-- Add the auth SDK alongside the existing Firebase scripts:
-  ```html
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-  ```
-- Add a **login gate**: if `firebase.auth().currentUser` is null, show an email/password form and call `firebase.auth().signInWithEmailAndPassword(...)`; otherwise render the app. Add a small **Sign out** button in the header.
+- The `firebase-auth-compat.js` SDK is loaded alongside the app/database SDKs.
+- A `Root` component listens to `firebase.auth().onAuthStateChanged`. While it's
+  resolving it shows *Loading…*; if no user is signed in it renders a **Sign In**
+  screen (email + password, plus **Forgot password?** which sends a reset email);
+  once signed in it renders the app.
+- The header shows the signed-in email and a **Sign Out** button.
+- **Fallback:** if Firebase isn't configured (or the auth SDK fails to load), the
+  gate is skipped and the app runs ungated in localStorage-only mode — so a bad
+  network can't fully lock people out during offline use.
 
-I can implement this gate and test it — just say the word.
+> **Before anyone can sign in**, you must (in the Firebase console) enable the
+> **Email/Password** provider and **create at least one user** (steps above). Until
+> then, sign-in fails with *"Email/Password sign-in isn't enabled in Firebase yet."*
+> Do this **before** locking the rules in Section 2, or you'll lock everyone out.
 
 ### Verify
 
