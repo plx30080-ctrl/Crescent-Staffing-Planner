@@ -1894,6 +1894,9 @@
             const savingRef = useRef(false);
             const undoTimerRef = useRef(null);
             const isLoadingRef = useRef(false);
+            // Per-report creation metadata { [docId]: { createdBy, createdAt } } so the
+            // original creator/created time survives autosaves (which set() the whole node).
+            const reportMetaRef = useRef({});
             const [roster, setRoster] = useState({});
 
             // Load roster from Firebase / localStorage
@@ -2103,6 +2106,30 @@
                 if (savingRef.current) return;
                 savingRef.current = true;
 
+                const docId = `${date}_${shift}`;
+                const now = new Date().toISOString();
+                const actor = user ? { uid: user.uid, email: user.email || '' } : null;
+
+                // Resolve creation metadata once per report/session, preserving whoever
+                // originally created it (an autosave set() would otherwise wipe it).
+                let meta = reportMetaRef.current[docId];
+                let isNewReport = false;
+                if (!meta) {
+                    meta = { createdBy: null, createdAt: null };
+                    if (isFirebaseConfigured && db) {
+                        try {
+                            const existing = await db.ref('staffing/' + docId).once('value');
+                            if (existing.exists()) {
+                                const ex = existing.val();
+                                meta.createdBy = ex.createdBy || null;
+                                meta.createdAt = ex.createdAt || null;
+                            }
+                        } catch (e) { /* fall through — treat as new */ }
+                    }
+                    if (!meta.createdAt) { isNewReport = true; meta.createdBy = actor; meta.createdAt = now; }
+                    reportMetaRef.current[docId] = meta;
+                }
+
                 const staffingData = {
                     date: date,
                     shift: shift,
@@ -2110,15 +2137,19 @@
                     waitlist: saveWaitlist,
                     indirect: saveIndirect || [],
                     locked: locked,
-                    lastUpdated: new Date().toISOString()
+                    lastUpdated: now,
+                    createdBy: meta.createdBy || null,
+                    createdAt: meta.createdAt || now,
+                    updatedBy: actor,
+                    updatedAt: now
                 };
 
                 // Save to Firebase first if configured
                 if (isFirebaseConfigured && db) {
                     try {
-                        const docId = `${date}_${shift}`;
                         await db.ref('staffing/' + docId).set(staffingData);
                         storage.save(`staffing_${date}_${shift}`, staffingData);
+                        if (isNewReport) logActivity('report_created', docId);
 
                         // Update lastLine / lastShift for each assigned associate
                         const nameToId = {};
@@ -2181,6 +2212,12 @@
                             if (snapshot.exists()) {
                                 const data = snapshot.val();
                                 console.log('Loaded from Firebase Realtime Database:', docId, data);
+                                // Cache creator so a later autosave preserves it (and doesn't
+                                // mislabel this edit as a new report in the activity log).
+                                reportMetaRef.current[docId] = {
+                                    createdBy: data.createdBy || null,
+                                    createdAt: data.createdAt || null
+                                };
                                 isLoadingRef.current = false;
                                 setLines(data.lines || []);
                                 setWaitlist(data.waitlist || []);
@@ -2264,9 +2301,11 @@
 
                     const docId = `${date}_${shift}`;
                     let alreadyExists = false;
+                    let existingData = null;
                     if (isFirebaseConfigured && db) {
                         const snap = await db.ref('staffing/' + docId).once('value');
                         alreadyExists = snap.exists();
+                        if (alreadyExists) existingData = snap.val();
                     }
                     if (!alreadyExists) {
                         alreadyExists = storage.load(`staffing_${date}_${shift}`, null) !== null;
@@ -2276,16 +2315,24 @@
                         if (!overwrite) { setImportStatus(''); return; }
                     }
 
+                    const importNow = new Date().toISOString();
+                    const importActor = user ? { uid: user.uid, email: user.email || '' } : null;
                     const staffingData = {
                         date, shift, lines, waitlist,
                         locked: false,
-                        lastUpdated: new Date().toISOString()
+                        lastUpdated: importNow,
+                        createdBy: (existingData && existingData.createdBy) || importActor,
+                        createdAt: (existingData && existingData.createdAt) || importNow,
+                        updatedBy: importActor,
+                        updatedAt: importNow
                     };
+                    reportMetaRef.current[docId] = { createdBy: staffingData.createdBy, createdAt: staffingData.createdAt };
 
                     if (isFirebaseConfigured && db) {
                         await db.ref('staffing/' + docId).set(staffingData);
                     }
                     storage.save(`staffing_${date}_${shift}`, staffingData);
+                    logActivity(existingData ? 'report_imported_overwrite' : 'report_imported', docId);
 
                     setImportStatus(`Imported ${date} - ${shift} ✓`);
                     setTimeout(() => setImportStatus(''), 4000);
@@ -3201,6 +3248,12 @@
                             >
                                 Roster &amp; Badge Check
                             </button>
+                            <button
+                                className={`tab ${activeTab === 'activity' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('activity')}
+                            >
+                                Activity
+                            </button>
                         </div>
 
                         {activeTab === 'setup' && (
@@ -3264,6 +3317,10 @@
 
                         {activeTab === 'analytics' && (
                             <AnalyticsView />
+                        )}
+
+                        {activeTab === 'activity' && (
+                            <ActivityView />
                         )}
 
                         {activeTab === 'core' && (
@@ -5011,6 +5068,149 @@
             });
         };
 
+        // ===== Activity / audit log view =====
+        const ACTIVITY_LABELS = {
+            login: 'Signed in',
+            account_created: 'Created account',
+            report_created: 'Created report',
+            report_imported: 'Imported report',
+            report_imported_overwrite: 'Imported report (overwrite)',
+            report_deleted: 'Deleted report'
+        };
+        const fmtDateTime = (iso) => {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            return isNaN(d) ? '—' : d.toLocaleString();
+        };
+        const fmtRelative = (iso) => {
+            if (!iso) return '';
+            const d = new Date(iso);
+            if (isNaN(d)) return '';
+            const s = Math.floor((Date.now() - d.getTime()) / 1000);
+            if (s < 60) return 'just now';
+            const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
+            const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
+            const days = Math.floor(h / 24); if (days < 30) return `${days}d ago`;
+            return d.toLocaleDateString();
+        };
+
+        function ActivityView() {
+            const [activity, setActivity] = useState([]);
+            const [users, setUsers] = useState({});
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState('');
+
+            const load = async () => {
+                setLoading(true);
+                setError('');
+                if (!isFirebaseConfigured || !db) {
+                    setError('Activity logging needs the cloud connection — it isn’t available in offline mode.');
+                    setLoading(false);
+                    return;
+                }
+                try {
+                    const [actSnap, usrSnap] = await Promise.all([
+                        db.ref('activity').limitToLast(300).once('value'),
+                        db.ref('users').once('value')
+                    ]);
+                    const list = [];
+                    actSnap.forEach((ch) => { list.push({ id: ch.key, ...ch.val() }); });
+                    list.reverse(); // newest first
+                    setActivity(list);
+                    setUsers(usrSnap.val() || {});
+                } catch (e) {
+                    console.error('Error loading activity:', e);
+                    setError('Could not load activity: ' + e.message);
+                }
+                setLoading(false);
+            };
+
+            useEffect(() => { load(); }, []);
+
+            const userRows = Object.entries(users)
+                .map(([uid, u]) => ({ uid, ...u }))
+                .sort((a, b) => (b.lastSeenAt || '').localeCompare(a.lastSeenAt || ''));
+
+            const th = { textAlign: 'left', padding: '8px 10px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.03em', color: '#6b7280', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' };
+            const td = { padding: '8px 10px', fontSize: '12px', borderBottom: '1px solid #f0f0f3', verticalAlign: 'top' };
+
+            return (
+                <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                        <h3 style={{ margin: 0 }}>Activity &amp; Logins</h3>
+                        <button className="btn btn-secondary btn-small" onClick={load} disabled={loading}>
+                            {loading ? 'Loading…' : 'Refresh'}
+                        </button>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '16px' }}>
+                        Who’s using the app and what’s been created, imported, or deleted.
+                    </p>
+
+                    {error && <div className="auth-error" style={{ maxWidth: '640px' }}>{error}</div>}
+
+                    {!error && (
+                        <>
+                            <h4 style={{ fontSize: '13px', margin: '4px 0 8px' }}>Users ({userRows.length})</h4>
+                            <div style={{ overflowX: 'auto', marginBottom: '28px' }}>
+                                <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '560px' }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={th}>User</th>
+                                            <th style={th}>Last login</th>
+                                            <th style={th}>Last seen</th>
+                                            <th style={th}>Logins</th>
+                                            <th style={th}>First seen</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {userRows.length === 0 && (
+                                            <tr><td style={td} colSpan={5}>No users recorded yet.</td></tr>
+                                        )}
+                                        {userRows.map((u) => (
+                                            <tr key={u.uid}>
+                                                <td style={{ ...td, fontWeight: 600 }}>{u.email || u.uid}</td>
+                                                <td style={td}>{fmtDateTime(u.lastLoginAt)}</td>
+                                                <td style={td} title={fmtDateTime(u.lastSeenAt)}>{fmtRelative(u.lastSeenAt) || '—'}</td>
+                                                <td style={td}>{u.loginCount || 0}</td>
+                                                <td style={td}>{fmtDateTime(u.firstSeenAt)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <h4 style={{ fontSize: '13px', margin: '4px 0 8px' }}>Recent activity ({activity.length})</h4>
+                            <div style={{ overflowX: 'auto' }}>
+                                <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: '560px' }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={th}>When</th>
+                                            <th style={th}>User</th>
+                                            <th style={th}>Action</th>
+                                            <th style={th}>Report / detail</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {activity.length === 0 && (
+                                            <tr><td style={td} colSpan={4}>No activity recorded yet.</td></tr>
+                                        )}
+                                        {activity.map((a) => (
+                                            <tr key={a.id}>
+                                                <td style={{ ...td, whiteSpace: 'nowrap' }} title={fmtDateTime(a.at)}>{fmtRelative(a.at)}</td>
+                                                <td style={td}>{a.email || '—'}</td>
+                                                <td style={td}>{ACTIVITY_LABELS[a.action] || a.action}</td>
+                                                <td style={{ ...td, fontFamily: a.target ? 'ui-monospace, monospace' : 'inherit' }}>{a.target || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
+                    )}
+                </div>
+            );
+        }
+
         function ReportingView({ onLoadShift }) {
             const [reports, setReports] = useState([]);
             const [loading, setLoading] = useState(false);
@@ -5084,6 +5284,7 @@
                     // Delete from localStorage
                     storage.remove('staffing_' + report.id);
                     setReports(prev => prev.filter(r => r.id !== report.id));
+                    logActivity('report_deleted', report.id);
                 } catch (error) {
                     console.error('Error deleting report:', error);
                     alert('Error deleting report: ' + error.message);
@@ -5163,6 +5364,17 @@
                         {report.lastUpdated && (
                             <p style={{ fontSize: '11px', marginTop: '4px' }}>
                                 Last updated: {new Date(report.lastUpdated).toLocaleString()}
+                            </p>
+                        )}
+                        {(report.createdBy || report.updatedBy) && (
+                            <p style={{ fontSize: '11px', marginTop: '2px', color: '#6b7280' }}>
+                                {report.createdBy && report.createdBy.email && (
+                                    <span>Created by {report.createdBy.email}</span>
+                                )}
+                                {report.updatedBy && report.updatedBy.email &&
+                                 (!report.createdBy || report.updatedBy.email !== report.createdBy.email) && (
+                                    <span>{report.createdBy && report.createdBy.email ? ' • ' : ''}Last edited by {report.updatedBy.email}</span>
+                                )}
                             </p>
                         )}
                     </div>
@@ -6974,6 +7186,48 @@
             }
         }
 
+        // ===== Activity / audit logging =====
+        // The signed-in user performing an action, or null (offline / auth disabled).
+        function currentActor() {
+            const u = isAuthEnabled && auth ? auth.currentUser : null;
+            return u ? { uid: u.uid, email: u.email || '' } : null;
+        }
+
+        // Append a discrete event to the audit feed. Fire-and-forget; never blocks the UI.
+        // Used for low-volume events (login, create, delete) — NOT per-keystroke edits,
+        // which are captured by updatedBy/updatedAt on the report instead.
+        function logActivity(action, target) {
+            if (!isFirebaseConfigured || !db) return;
+            const actor = currentActor();
+            try {
+                db.ref('activity').push({
+                    at: new Date().toISOString(),
+                    uid: actor ? actor.uid : null,
+                    email: actor ? actor.email : null,
+                    action: action,
+                    target: target || null
+                });
+            } catch (e) { console.error('logActivity failed:', e); }
+        }
+
+        // Upsert the per-user record. `fresh` = an explicit sign-in/sign-up (bumps
+        // lastLoginAt + loginCount); otherwise it's a session restore (lastSeenAt only).
+        function recordUserSession(u, fresh) {
+            if (!isFirebaseConfigured || !db || !u) return;
+            const ref = db.ref('users/' + u.uid);
+            const now = new Date().toISOString();
+            ref.child('firstSeenAt').once('value').then((snap) => {
+                const updates = { email: u.email || '', lastSeenAt: now };
+                if (!snap.exists()) updates.firstSeenAt = now;
+                if (fresh) updates.lastLoginAt = now;
+                return ref.update(updates);
+            }).then(() => {
+                if (fresh) {
+                    ref.child('loginCount').transaction((c) => (c || 0) + 1);
+                }
+            }).catch((e) => console.error('recordUserSession failed:', e));
+        }
+
         function LoginScreen() {
             const [mode, setMode] = useState('signin'); // 'signin' | 'signup'
             const [email, setEmail] = useState('');
@@ -7008,9 +7262,12 @@
                 setBusy(true);
                 try {
                     if (isSignup) {
-                        await auth.createUserWithEmailAndPassword(email.trim(), password);
+                        const cred = await auth.createUserWithEmailAndPassword(email.trim(), password);
+                        recordUserSession(cred.user, true);
+                        logActivity('account_created', (cred.user && cred.user.email) || email.trim());
                     } else {
-                        await auth.signInWithEmailAndPassword(email.trim(), password);
+                        const cred = await auth.signInWithEmailAndPassword(email.trim(), password);
+                        recordUserSession(cred.user, true);
                     }
                     // On success, onAuthStateChanged in Root swaps to the app.
                 } catch (err) {
@@ -7129,6 +7386,7 @@
                 const unsub = auth.onAuthStateChanged((u) => {
                     setUser(u);
                     setAuthState(u ? 'in' : 'out');
+                    if (u) recordUserSession(u, false); // session restore / app open
                 });
                 return unsub;
             }, []);
